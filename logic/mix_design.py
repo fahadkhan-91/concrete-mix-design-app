@@ -1,11 +1,17 @@
 # ACI 211.1 Concrete Mix Design Calculation Engine
 
 # Table 6.3.3 - Approximate water content (kg/m3) - Non-air-entrained concrete
-# Keys: (slump_range, max_agg_size) -> water content
 WATER_CONTENT_TABLE = {
     "low":    {10: 199, 20: 190, 25: 179, 40: 166},   # slump 25-50mm
     "medium": {10: 216, 20: 205, 25: 193, 40: 181},   # slump 75-100mm
     "high":   {10: 228, 20: 216, 25: 202, 40: 190},   # slump 150-175mm
+}
+
+# Air-entrained water content (kg/m3) - used when exposure is moderate/severe
+AIR_ENTRAINED_WATER_CONTENT = {
+    "low":    {10: 181, 20: 168, 25: 160, 40: 150},
+    "medium": {10: 202, 20: 184, 25: 175, 40: 165},
+    "high":   {10: 216, 20: 197, 25: 184, 40: 174},
 }
 
 # Table 6.3.4(a) - W/C ratio vs target compressive strength (MPa), non-air-entrained
@@ -26,12 +32,25 @@ COARSE_AGG_VOLUME_TABLE = {
     40: {2.40: 0.75, 2.60: 0.73, 2.80: 0.71, 3.00: 0.69},
 }
 
+# Exposure-based air content (%) - target air content
+EXPOSURE_AIR_CONTENT = {
+    "mild": 2.0,       # non-air-entrained, trapped air only
+    "moderate": 4.5,
+    "severe": 6.0,
+}
+
+# Exposure-based maximum permissible w/c ratio (durability requirement, ACI 318)
+EXPOSURE_MAX_WC_RATIO = {
+    "mild": 0.60,
+    "moderate": 0.50,
+    "severe": 0.45,
+}
+
 # Assumed material properties (can be made user-editable later)
 CEMENT_SG = 3.15          # specific gravity of cement
 FINE_AGG_SG = 2.65        # specific gravity of fine aggregate
 COARSE_AGG_SG = 2.65      # specific gravity of coarse aggregate
 COARSE_AGG_DRY_RODDED_DENSITY = 1600   # kg/m3 (typical assumption)
-AIR_CONTENT_PERCENT = 2.0  # non-air-entrained, approx trapped air %
 
 
 def get_slump_category(slump):
@@ -54,7 +73,6 @@ def interpolate_wc_ratio(fck):
         s1, r1 = table[i]
         s2, r2 = table[i + 1]
         if s1 <= fck <= s2:
-            # linear interpolation
             ratio = r1 + (r2 - r1) * (fck - s1) / (s2 - s1)
             return round(ratio, 3)
 
@@ -81,13 +99,21 @@ def calculate_mix(data):
     slump = data['slump']
     max_agg_size = data['max_agg_size']
     fm_sand = data['fm_sand']
+    exposure = data['exposure']
 
-    # Step 1: Water content
+    # Step 1: Water content (air-entrained table if exposure needs air)
     slump_category = get_slump_category(slump)
-    water_content = WATER_CONTENT_TABLE[slump_category][max_agg_size]
+    if exposure in ("moderate", "severe"):
+        water_content = AIR_ENTRAINED_WATER_CONTENT[slump_category][max_agg_size]
+    else:
+        water_content = WATER_CONTENT_TABLE[slump_category][max_agg_size]
 
-    # Step 2: W/C ratio
-    wc_ratio = interpolate_wc_ratio(fck)
+    # Step 2: W/C ratio - stricter (lower) of strength-based and exposure-based
+    wc_ratio_strength = interpolate_wc_ratio(fck)
+    wc_ratio_exposure = EXPOSURE_MAX_WC_RATIO[exposure]
+    wc_ratio = min(wc_ratio_strength, wc_ratio_exposure)
+
+    air_content_percent = EXPOSURE_AIR_CONTENT[exposure]
 
     # Step 3: Cement content
     cement_content = water_content / wc_ratio
@@ -97,23 +123,25 @@ def calculate_mix(data):
     coarse_agg_weight = coarse_agg_fraction * COARSE_AGG_DRY_RODDED_DENSITY
 
     # Step 5: Volumes (per 1 m3 = 1000 liters)
-    volume_cement = cement_content / (CEMENT_SG * 1000) * 1000   # liters
-    volume_water = water_content / 1000 * 1000                  # liters
-    volume_coarse = coarse_agg_weight / (COARSE_AGG_SG * 1000) * 1000  # liters
-    volume_air = (AIR_CONTENT_PERCENT / 100) * 1000              # liters
+    volume_cement = cement_content / (CEMENT_SG * 1000) * 1000
+    volume_water = water_content / 1000 * 1000
+    volume_coarse = coarse_agg_weight / (COARSE_AGG_SG * 1000) * 1000
+    volume_air = (air_content_percent / 100) * 1000
 
     volume_used = volume_cement + volume_water + volume_coarse + volume_air
-    volume_fine = 1000 - volume_used   # remaining liters for fine aggregate
+    volume_fine = 1000 - volume_used
 
     fine_agg_weight = (volume_fine / 1000) * FINE_AGG_SG * 1000
 
     return {
         'slump_category': slump_category,
         'water': round(water_content, 1),
+        'wc_ratio_strength': wc_ratio_strength,
+        'wc_ratio_exposure_limit': wc_ratio_exposure,
         'wc_ratio': wc_ratio,
         'cement': round(cement_content, 1),
         'coarse_agg_fraction': coarse_agg_fraction,
         'coarse_agg': round(coarse_agg_weight, 1),
         'fine_agg': round(fine_agg_weight, 1),
-        'air_content_percent': AIR_CONTENT_PERCENT,
+        'air_content_percent': air_content_percent,
     }
