@@ -39,19 +39,24 @@
         </form>
 
         {% if result %}
-    <h2>Result</h2>
-    {% if result.error %}
-        <p style="color:red;">Error: {{ result.error }}</p>
-    {% else %}
-        <table>
-            <tr><td>Slump Category</td><td>{{ result.slump_category }}</td></tr>
-            <tr><td>Water Content</td><td>{{ result.water }} kg/m³</td></tr>
-            <tr><td>W/C Ratio</td><td>{{ result.wc_ratio }}</td></tr>
-            <tr><td>Cement Content</td><td>{{ result.cement }} kg/m³</td></tr>
-            <tr><td>Coarse Aggregate Volume Fraction</td><td>{{ result.coarse_agg_fraction }}</td></tr>
-            <tr><td>Coarse Aggregate</td><td>{{ result.coarse_agg }} kg/m³</td></tr>
-            <tr><td>Fine Aggregate</td><td>{{ result.fine_agg }} kg/m³</td></tr>
-            <tr><td>Air Content</td><td>{{ result.air_content_percent }}%</td></tr>
-        </table>
-    {% endif %}
-{% endif %}
+            <h2>Result</h2>
+            {% if result.error %}
+                <p style="color:red;">Error: {{ result.error }}</p>
+            {% else %}
+                <table>
+                    <tr><td>Slump Category</td><td>{{ result.slump_category }}</td></tr>
+                    <tr><td>Water Content</td><td>{{ result.water }} kg/m³</td></tr>
+                    <tr><td>W/C Ratio (strength-based)</td><td>{{ result.wc_ratio_strength }}</td></tr>
+                    <tr><td>W/C Ratio (exposure limit)</td><td>{{ result.wc_ratio_exposure_limit }}</td></tr>
+                    <tr><td>Final W/C Ratio Used</td><td>{{ result.wc_ratio }}</td></tr>
+                    <tr><td>Cement Content</td><td>{{ result.cement }} kg/m³</td></tr>
+                    <tr><td>Coarse Aggregate Volume Fraction</td><td>{{ result.coarse_agg_fraction }}</td></tr>
+                    <tr><td>Coarse Aggregate</td><td>{{ result.coarse_agg }} kg/m³</td></tr>
+                    <tr><td>Fine Aggregate</td><td>{{ result.fine_agg }} kg/m³</td></tr>
+                    <tr><td>Air Content</td><td>{{ result.air_content_percent }}%</td></tr>
+                </table>
+            {% endif %}
+        {% endif %}
+    </div>
+</body>
+</html>
