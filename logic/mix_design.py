@@ -1,30 +1,22 @@
 # concrete mix design calculations - ACI 211.1 method
 
-# water content table (kg/m3) - non air entrained
 water_table = {
-    "low":    {10: 199, 20: 190, 25: 179, 40: 166},   # slump 25-50
-    "medium": {10: 216, 20: 205, 25: 193, 40: 181},   # slump 75-100
-    "high":   {10: 228, 20: 216, 25: 202, 40: 190},   # slump 150-175
+    "low":    {10: 199, 20: 190, 25: 179, 40: 166},
+    "medium": {10: 216, 20: 205, 25: 193, 40: 181},
+    "high":   {10: 228, 20: 216, 25: 202, 40: 190},
 }
 
-# same but air entrained (jab exposure severe/moderate ho)
 water_table_air = {
     "low":    {10: 181, 20: 168, 25: 160, 40: 150},
     "medium": {10: 202, 20: 184, 25: 175, 40: 165},
     "high":   {10: 216, 20: 197, 25: 184, 40: 174},
 }
 
-# strength vs w/c ratio, ACI table 6.3.4(a)
 wc_table = [
-    (40, 0.42),
-    (35, 0.47),
-    (30, 0.54),
-    (25, 0.61),
-    (20, 0.69),
-    (15, 0.79),
+    (40, 0.42), (35, 0.47), (30, 0.54),
+    (25, 0.61), (20, 0.69), (15, 0.79),
 ]
 
-# coarse agg volume fraction vs max size + fineness modulus
 coarse_agg_table = {
     10: {2.40: 0.50, 2.60: 0.48, 2.80: 0.46, 3.00: 0.44},
     20: {2.40: 0.66, 2.60: 0.64, 2.80: 0.62, 3.00: 0.60},
@@ -32,11 +24,9 @@ coarse_agg_table = {
     40: {2.40: 0.75, 2.60: 0.73, 2.80: 0.71, 3.00: 0.69},
 }
 
-# exposure ke hisab se air content aur max wc limit
 exposure_air = {"mild": 2.0, "moderate": 4.5, "severe": 6.0}
 exposure_wc_limit = {"mild": 0.60, "moderate": 0.50, "severe": 0.45}
 
-# assumed values, in kg/m3 or specific gravity
 cement_sg = 3.15
 fine_sg = 2.65
 coarse_sg = 2.65
@@ -52,7 +42,6 @@ def slump_category(slump):
 
 
 def get_wc_ratio(fck):
-    # simple linear interpolation between table points
     table = sorted(wc_table, key=lambda x: x[0])
     if fck >= table[-1][0]:
         return table[-1][1]
@@ -79,10 +68,16 @@ def get_coarse_fraction(max_size, fm):
             return round(v1 + (v2 - v1) * (fm - f1) / (f2 - f1), 3)
 
 
-def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand):
+def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand,
+                   fine_moisture=0.0, fine_absorption=0.0,
+                   coarse_moisture=0.0, coarse_absorption=0.0):
+    """
+    fine_moisture / coarse_moisture = actual moisture content of aggregate on site (%)
+    fine_absorption / coarse_absorption = aggregate's absorption capacity (%)
+    Agar site pe dry aggregate use ho raha ho to sab 0 rakh do, batch design values hi milengi.
+    """
     category = slump_category(slump)
 
-    # air entrained water table use karo agar exposure severe ya moderate ho
     if exposure in ("moderate", "severe"):
         water = water_table_air[category][max_agg_size]
     else:
@@ -90,7 +85,7 @@ def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand):
 
     wc_strength = get_wc_ratio(fck)
     wc_limit = exposure_wc_limit[exposure]
-    wc_final = min(wc_strength, wc_limit)   # jo bhi zyada strict ho wo lena hai
+    wc_final = min(wc_strength, wc_limit)
 
     air_percent = exposure_air[exposure]
     cement = water / wc_final
@@ -98,7 +93,6 @@ def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand):
     coarse_fraction = get_coarse_fraction(max_agg_size, fm_sand)
     coarse_weight = coarse_fraction * coarse_dry_density
 
-    # ab volumes nikalna hai, 1m3 = 1000 litre
     vol_cement = cement / (cement_sg * 1000) * 1000
     vol_water = water / 1000 * 1000
     vol_coarse = coarse_weight / (coarse_sg * 1000) * 1000
@@ -107,15 +101,39 @@ def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand):
     vol_fine = 1000 - (vol_cement + vol_water + vol_coarse + vol_air)
     fine_weight = (vol_fine / 1000) * fine_sg * 1000
 
+    # yahan tak sab "dry / batch design" quantities hain - ab moisture correction lagayenge
+
+    # free moisture = jo moisture aggregate ke andar absorb nahi hui, balke bahar chipki hui hai
+    fine_free_moisture = fine_moisture - fine_absorption
+    coarse_free_moisture = coarse_moisture - coarse_absorption
+
+    # field weight - aggregate apna moisture bhi carry karega isliye weight badh jayega
+    fine_field_weight = fine_weight * (1 + fine_moisture / 100)
+    coarse_field_weight = coarse_weight * (1 + coarse_moisture / 100)
+
+    # extra pani jo aggregate se mix mein add ho raha hai, wo batch water se minus karna hai
+    water_from_fine = fine_weight * (fine_free_moisture / 100)
+    water_from_coarse = coarse_weight * (coarse_free_moisture / 100)
+
+    field_water = water - water_from_fine - water_from_coarse
+
     return {
         "slump_category": category,
-        "water": round(water, 1),
         "wc_strength": wc_strength,
         "wc_limit": wc_limit,
         "wc_final": wc_final,
-        "cement": round(cement, 1),
-        "coarse_fraction": coarse_fraction,
-        "coarse": round(coarse_weight, 1),
-        "fine": round(fine_weight, 1),
         "air_percent": air_percent,
+        "coarse_fraction": coarse_fraction,
+
+        # dry / batch design quantities (lab basis, no moisture)
+        "water_batch": round(water, 1),
+        "cement_batch": round(cement, 1),
+        "coarse_batch": round(coarse_weight, 1),
+        "fine_batch": round(fine_weight, 1),
+
+        # field quantities (actual site pe dalne wali quantity, moisture adjusted)
+        "cement_field": round(cement, 1),   # cement moisture se affect nahi hota
+        "fine_field": round(fine_field_weight, 1),
+        "coarse_field": round(coarse_field_weight, 1),
+        "water_field": round(field_water, 1),
     }
