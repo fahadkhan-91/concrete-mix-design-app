@@ -137,3 +137,41 @@ def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand,
         "coarse_field": round(coarse_field_weight, 1),
         "water_field": round(field_water, 1),
     }
+def compute_batch_quantities(result, volume_m3=1.0, bag_weight=50):
+    """
+    result = calculate_mix() ka output
+    volume_m3 = kitna total concrete cast karna hai (m3 mein)
+    bag_weight = ek cement bag ka weight (kg), Pakistan mein aam tor pe 50kg hota hai
+    """
+    cement_per_m3 = result["cement_field"]
+    water_per_m3 = result["water_field"]
+    fine_per_m3 = result["fine_field"]
+    coarse_per_m3 = result["coarse_field"]
+
+    # ek bag ke against kitna paani/ret/bajri chahiye
+    bags_per_m3 = cement_per_m3 / bag_weight
+
+    water_per_bag = water_per_m3 / bags_per_m3
+    fine_per_bag = fine_per_m3 / bags_per_m3
+    coarse_per_bag = coarse_per_m3 / bags_per_m3
+
+    # poori job ke liye total quantities
+    total_cement = cement_per_m3 * volume_m3
+    total_water = water_per_m3 * volume_m3
+    total_fine = fine_per_m3 * volume_m3
+    total_coarse = coarse_per_m3 * volume_m3
+    total_bags = total_cement / bag_weight
+
+    return {
+        "bags_per_m3": round(bags_per_m3, 2),
+        "water_per_bag": round(water_per_bag, 1),
+        "fine_per_bag": round(fine_per_bag, 1),
+        "coarse_per_bag": round(coarse_per_bag, 1),
+
+        "volume_m3": volume_m3,
+        "total_bags": round(total_bags, 1),
+        "total_cement_kg": round(total_cement, 1),
+        "total_water_kg": round(total_water, 1),
+        "total_fine_kg": round(total_fine, 1),
+        "total_coarse_kg": round(total_coarse, 1),
+    }
