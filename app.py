@@ -2,10 +2,9 @@ import sys
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QTableWidget,
-    QTableWidgetItem, QFrame, QHeaderView
+    QTableWidgetItem, QFrame, QHeaderView, QTabWidget
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
 
 from logic.mix_design import calculate_mix
 
@@ -14,7 +13,7 @@ class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1")
-        self.resize(950, 650)
+        self.resize(1000, 700)
         self.build_ui()
         self.apply_styles()
 
@@ -23,11 +22,11 @@ class MixDesignApp(QWidget):
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(25, 25, 25, 25)
 
-        # left side - input form card
+        # ---------- left card: inputs ----------
         form_card = QFrame()
         form_card.setObjectName("card")
         form_layout = QVBoxLayout(form_card)
-        form_layout.setSpacing(14)
+        form_layout.setSpacing(12)
 
         title = QLabel("Mix Design Inputs")
         title.setObjectName("title")
@@ -37,36 +36,32 @@ class MixDesignApp(QWidget):
         subtitle.setObjectName("subtitle")
         form_layout.addWidget(subtitle)
 
+        # basic design grid
         grid = QGridLayout()
-        grid.setVerticalSpacing(12)
+        grid.setVerticalSpacing(10)
         grid.setHorizontalSpacing(10)
 
-        # target strength
         grid.addWidget(QLabel("Target Strength f'ck (MPa)"), 0, 0)
         self.fck_input = QLineEdit()
         self.fck_input.setPlaceholderText("e.g. 30")
         grid.addWidget(self.fck_input, 0, 1)
 
-        # slump
         grid.addWidget(QLabel("Slump (mm)"), 1, 0)
         self.slump_input = QLineEdit()
         self.slump_input.setPlaceholderText("e.g. 100")
         grid.addWidget(self.slump_input, 1, 1)
 
-        # max aggregate size
         grid.addWidget(QLabel("Max Aggregate Size (mm)"), 2, 0)
         self.agg_size_combo = QComboBox()
         self.agg_size_combo.addItems(["10", "20", "25", "40"])
         self.agg_size_combo.setCurrentText("20")
         grid.addWidget(self.agg_size_combo, 2, 1)
 
-        # exposure
         grid.addWidget(QLabel("Exposure Condition"), 3, 0)
         self.exposure_combo = QComboBox()
         self.exposure_combo.addItems(["mild", "moderate", "severe"])
         grid.addWidget(self.exposure_combo, 3, 1)
 
-        # fineness modulus
         grid.addWidget(QLabel("Fineness Modulus of Sand"), 4, 0)
         self.fm_input = QLineEdit()
         self.fm_input.setPlaceholderText("e.g. 2.6")
@@ -74,13 +69,38 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(grid)
 
-        # calculate button
+        # moisture correction section - collapsible feel using a label divider
+        moisture_label = QLabel("Aggregate Moisture Correction (optional, 0 se start karo)")
+        moisture_label.setObjectName("sectionLabel")
+        form_layout.addWidget(moisture_label)
+
+        moisture_grid = QGridLayout()
+        moisture_grid.setVerticalSpacing(10)
+        moisture_grid.setHorizontalSpacing(10)
+
+        moisture_grid.addWidget(QLabel("Fine Agg. Moisture (%)"), 0, 0)
+        self.fine_moisture_input = QLineEdit("0")
+        moisture_grid.addWidget(self.fine_moisture_input, 0, 1)
+
+        moisture_grid.addWidget(QLabel("Fine Agg. Absorption (%)"), 1, 0)
+        self.fine_absorption_input = QLineEdit("0")
+        moisture_grid.addWidget(self.fine_absorption_input, 1, 1)
+
+        moisture_grid.addWidget(QLabel("Coarse Agg. Moisture (%)"), 2, 0)
+        self.coarse_moisture_input = QLineEdit("0")
+        moisture_grid.addWidget(self.coarse_moisture_input, 2, 1)
+
+        moisture_grid.addWidget(QLabel("Coarse Agg. Absorption (%)"), 3, 0)
+        self.coarse_absorption_input = QLineEdit("0")
+        moisture_grid.addWidget(self.coarse_absorption_input, 3, 1)
+
+        form_layout.addLayout(moisture_grid)
+
         self.calc_btn = QPushButton("Calculate Mix Design")
         self.calc_btn.setObjectName("calcBtn")
         self.calc_btn.clicked.connect(self.on_calculate)
         form_layout.addWidget(self.calc_btn)
 
-        # error label, hidden until something goes wrong
         self.error_label = QLabel("")
         self.error_label.setObjectName("errorLabel")
         self.error_label.setWordWrap(True)
@@ -88,7 +108,7 @@ class MixDesignApp(QWidget):
 
         form_layout.addStretch()
 
-        # right side - results card
+        # ---------- right card: results ----------
         result_card = QFrame()
         result_card.setObjectName("card")
         result_layout = QVBoxLayout(result_card)
@@ -97,19 +117,30 @@ class MixDesignApp(QWidget):
         result_title.setObjectName("title")
         result_layout.addWidget(result_title)
 
-        self.result_table = QTableWidget()
-        self.result_table.setColumnCount(2)
-        self.result_table.setHorizontalHeaderLabels(["Parameter", "Value"])
-        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.result_table.verticalHeader().setVisible(False)
-        self.result_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        result_layout.addWidget(self.result_table)
+        # tabs - batch (lab/dry) vs field (moisture adjusted)
+        self.tabs = QTabWidget()
+
+        self.batch_table = self.make_result_table()
+        self.field_table = self.make_result_table()
+
+        self.tabs.addTab(self.batch_table, "Batch (Dry) Quantities")
+        self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
+
+        result_layout.addWidget(self.tabs)
 
         main_layout.addWidget(form_card, 1)
         main_layout.addWidget(result_card, 1)
 
+    def make_result_table(self):
+        table = QTableWidget()
+        table.setColumnCount(2)
+        table.setHorizontalHeaderLabels(["Parameter", "Value"])
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        return table
+
     def on_calculate(self):
-        # pehle purana error clear kar do
         self.error_label.setText("")
 
         try:
@@ -118,31 +149,55 @@ class MixDesignApp(QWidget):
             max_agg_size = int(self.agg_size_combo.currentText())
             exposure = self.exposure_combo.currentText()
             fm_sand = float(self.fm_input.text())
+
+            fine_moisture = float(self.fine_moisture_input.text() or 0)
+            fine_absorption = float(self.fine_absorption_input.text() or 0)
+            coarse_moisture = float(self.coarse_moisture_input.text() or 0)
+            coarse_absorption = float(self.coarse_absorption_input.text() or 0)
         except ValueError:
             self.error_label.setText("Sab fields sahi se bharo — numbers hi likhne hain.")
             return
 
-        result = calculate_mix(fck, slump, max_agg_size, exposure, fm_sand)
+        result = calculate_mix(
+            fck, slump, max_agg_size, exposure, fm_sand,
+            fine_moisture, fine_absorption,
+            coarse_moisture, coarse_absorption
+        )
         self.populate_results(result)
 
     def populate_results(self, result):
-        rows = [
+        # common design parameters, dono tabs mein dikhega
+        common_rows = [
             ("Slump Category", result["slump_category"]),
-            ("Water Content", f'{result["water"]} kg/m³'),
             ("W/C Ratio (strength-based)", result["wc_strength"]),
             ("W/C Ratio (exposure limit)", result["wc_limit"]),
             ("Final W/C Ratio Used", result["wc_final"]),
-            ("Cement Content", f'{result["cement"]} kg/m³'),
             ("Coarse Aggregate Fraction", result["coarse_fraction"]),
-            ("Coarse Aggregate", f'{result["coarse"]} kg/m³'),
-            ("Fine Aggregate", f'{result["fine"]} kg/m³'),
             ("Air Content", f'{result["air_percent"]}%'),
         ]
 
-        self.result_table.setRowCount(len(rows))
+        batch_rows = common_rows + [
+            ("Water (batch)", f'{result["water_batch"]} kg/m³'),
+            ("Cement (batch)", f'{result["cement_batch"]} kg/m³'),
+            ("Fine Aggregate (batch)", f'{result["fine_batch"]} kg/m³'),
+            ("Coarse Aggregate (batch)", f'{result["coarse_batch"]} kg/m³'),
+        ]
+
+        field_rows = common_rows + [
+            ("Water (field, adjusted)", f'{result["water_field"]} kg/m³'),
+            ("Cement (field)", f'{result["cement_field"]} kg/m³'),
+            ("Fine Aggregate (field)", f'{result["fine_field"]} kg/m³'),
+            ("Coarse Aggregate (field)", f'{result["coarse_field"]} kg/m³'),
+        ]
+
+        self.fill_table(self.batch_table, batch_rows)
+        self.fill_table(self.field_table, field_rows)
+
+    def fill_table(self, table, rows):
+        table.setRowCount(len(rows))
         for i, (label, value) in enumerate(rows):
-            self.result_table.setItem(i, 0, QTableWidgetItem(label))
-            self.result_table.setItem(i, 1, QTableWidgetItem(str(value)))
+            table.setItem(i, 0, QTableWidgetItem(label))
+            table.setItem(i, 1, QTableWidgetItem(str(value)))
 
     def apply_styles(self):
         self.setStyleSheet("""
@@ -164,7 +219,13 @@ class MixDesignApp(QWidget):
             #subtitle {
                 font-size: 12px;
                 color: #8b94a8;
-                margin-bottom: 10px;
+                margin-bottom: 6px;
+            }
+            #sectionLabel {
+                font-size: 13px;
+                font-weight: bold;
+                color: #4f8cff;
+                margin-top: 8px;
             }
             QLabel {
                 font-size: 13px;
@@ -210,6 +271,17 @@ class MixDesignApp(QWidget):
                 padding: 6px;
                 border: none;
                 font-weight: bold;
+            }
+            QTabBar::tab {
+                background-color: #1a2029;
+                color: #8b94a8;
+                padding: 8px 16px;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+            }
+            QTabBar::tab:selected {
+                background-color: #4f8cff;
+                color: white;
             }
         """)
 
