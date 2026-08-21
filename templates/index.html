@@ -1,1 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Concrete Mix Design (ACI 211.1)</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Concrete Mix Design Calculator</h1>
+        <p>Method: ACI 211.1</p>
 
+        <form method="POST" action="/calculate">
+            <label>Target Strength f'ck (MPa):</label>
+            <input type="number" name="fck" step="0.1" required>
+
+            <label>Slump (mm):</label>
+            <input type="number" name="slump" required>
+
+            <label>Max Aggregate Size (mm):</label>
+            <select name="max_agg_size">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="25">25</option>
+                <option value="40">40</option>
+            </select>
+
+            <label>Exposure Condition:</label>
+            <select name="exposure">
+                <option value="mild">Mild</option>
+                <option value="moderate">Moderate</option>
+                <option value="severe">Severe</option>
+            </select>
+
+            <label>Fineness Modulus of Sand:</label>
+            <input type="number" name="fm_sand" step="0.1" required>
+
+            <button type="submit">Calculate</button>
+        </form>
+
+        {% if result %}
+            <h2>Result</h2>
+            {% if result.error %}
+                <p style="color:red;">Error: {{ result.error }}</p>
+            {% else %}
+                <table>
+                    <tr><td>Water Content</td><td>{{ result.water }} kg/m³</td></tr>
+                    <tr><td>W/C Ratio</td><td>{{ result.wc_ratio }}</td></tr>
+                    <tr><td>Cement Content</td><td>{{ result.cement }} kg/m³</td></tr>
+                </table>
+                <p><em>{{ result.note }}</em></p>
+            {% endif %}
+        {% endif %}
+    </div>
+</body>
+</html>
