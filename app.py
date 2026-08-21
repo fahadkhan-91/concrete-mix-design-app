@@ -6,14 +6,15 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from logic.mix_design import calculate_mix
+from logic.mix_design import calculate_mix, compute_batch_quantities
 
 
 class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1")
-        self.resize(1000, 700)
+        self.resize(1050, 720)
+        self.last_result = None   # calculate_mix ka result yahan store karenge, batch tab ke liye
         self.build_ui()
         self.apply_styles()
 
@@ -36,7 +37,6 @@ class MixDesignApp(QWidget):
         subtitle.setObjectName("subtitle")
         form_layout.addWidget(subtitle)
 
-        # basic design grid
         grid = QGridLayout()
         grid.setVerticalSpacing(10)
         grid.setHorizontalSpacing(10)
@@ -69,7 +69,6 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(grid)
 
-        # moisture correction section - collapsible feel using a label divider
         moisture_label = QLabel("Aggregate Moisture Correction (optional, 0 se start karo)")
         moisture_label.setObjectName("sectionLabel")
         form_layout.addWidget(moisture_label)
@@ -96,6 +95,25 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(moisture_grid)
 
+        # batch section - kitna total concrete cast karna hai
+        batch_label = QLabel("Batch / Site Quantity")
+        batch_label.setObjectName("sectionLabel")
+        form_layout.addWidget(batch_label)
+
+        batch_grid = QGridLayout()
+        batch_grid.setVerticalSpacing(10)
+        batch_grid.setHorizontalSpacing(10)
+
+        batch_grid.addWidget(QLabel("Total Volume Needed (m³)"), 0, 0)
+        self.volume_input = QLineEdit("1")
+        batch_grid.addWidget(self.volume_input, 0, 1)
+
+        batch_grid.addWidget(QLabel("Cement Bag Weight (kg)"), 1, 0)
+        self.bag_weight_input = QLineEdit("50")
+        batch_grid.addWidget(self.bag_weight_input, 1, 1)
+
+        form_layout.addLayout(batch_grid)
+
         self.calc_btn = QPushButton("Calculate Mix Design")
         self.calc_btn.setObjectName("calcBtn")
         self.calc_btn.clicked.connect(self.on_calculate)
@@ -117,14 +135,15 @@ class MixDesignApp(QWidget):
         result_title.setObjectName("title")
         result_layout.addWidget(result_title)
 
-        # tabs - batch (lab/dry) vs field (moisture adjusted)
         self.tabs = QTabWidget()
 
-        self.batch_table = self.make_result_table()
-        self.field_table = self.make_result_table()
+        self.batch_design_table = self.make_result_table()   # per m3 dry
+        self.field_table = self.make_result_table()           # per m3 moisture adjusted
+        self.site_batch_table = self.make_result_table()      # per bag + total quantities
 
-        self.tabs.addTab(self.batch_table, "Batch (Dry) Quantities")
+        self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
         self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
+        self.tabs.addTab(self.site_batch_table, "Site Batching")
 
         result_layout.addWidget(self.tabs)
 
@@ -154,6 +173,9 @@ class MixDesignApp(QWidget):
             fine_absorption = float(self.fine_absorption_input.text() or 0)
             coarse_moisture = float(self.coarse_moisture_input.text() or 0)
             coarse_absorption = float(self.coarse_absorption_input.text() or 0)
+
+            volume_m3 = float(self.volume_input.text() or 1)
+            bag_weight = float(self.bag_weight_input.text() or 50)
         except ValueError:
             self.error_label.setText("Sab fields sahi se bharo — numbers hi likhne hain.")
             return
@@ -163,10 +185,13 @@ class MixDesignApp(QWidget):
             fine_moisture, fine_absorption,
             coarse_moisture, coarse_absorption
         )
-        self.populate_results(result)
+        self.last_result = result
 
-    def populate_results(self, result):
-        # common design parameters, dono tabs mein dikhega
+        batch_info = compute_batch_quantities(result, volume_m3, bag_weight)
+
+        self.populate_results(result, batch_info)
+
+    def populate_results(self, result, batch_info):
         common_rows = [
             ("Slump Category", result["slump_category"]),
             ("W/C Ratio (strength-based)", result["wc_strength"]),
@@ -190,13 +215,27 @@ class MixDesignApp(QWidget):
             ("Coarse Aggregate (field)", f'{result["coarse_field"]} kg/m³'),
         ]
 
-        self.fill_table(self.batch_table, batch_rows)
+        site_rows = [
+            ("Cement Bags per m³", batch_info["bags_per_m3"]),
+            ("Water per Bag", f'{batch_info["water_per_bag"]} kg'),
+            ("Fine Aggregate per Bag", f'{batch_info["fine_per_bag"]} kg'),
+            ("Coarse Aggregate per Bag", f'{batch_info["coarse_per_bag"]} kg'),
+            ("— Total for Requested Volume —", f'{batch_info["volume_m3"]} m³'),
+            ("Total Cement Bags", batch_info["total_bags"]),
+            ("Total Cement", f'{batch_info["total_cement_kg"]} kg'),
+            ("Total Water", f'{batch_info["total_water_kg"]} kg'),
+            ("Total Fine Aggregate", f'{batch_info["total_fine_kg"]} kg'),
+            ("Total Coarse Aggregate", f'{batch_info["total_coarse_kg"]} kg'),
+        ]
+
+        self.fill_table(self.batch_design_table, batch_rows)
         self.fill_table(self.field_table, field_rows)
+        self.fill_table(self.site_batch_table, site_rows)
 
     def fill_table(self, table, rows):
         table.setRowCount(len(rows))
         for i, (label, value) in enumerate(rows):
-            table.setItem(i, 0, QTableWidgetItem(label))
+            table.setItem(i, 0, QTableWidgetItem(str(label)))
             table.setItem(i, 1, QTableWidgetItem(str(value)))
 
     def apply_styles(self):
