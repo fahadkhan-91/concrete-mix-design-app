@@ -7,7 +7,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from logic.mix_design import calculate_mix, compute_batch_quantities, compute_cost_estimate
+from logic.mix_design import (
+    calculate_mix, compute_batch_quantities, compute_cost_estimate, adjust_trial_mix
+)
 from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects
 from report_generator import generate_pdf_report
 
@@ -16,7 +18,7 @@ class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1")
-        self.resize(1150, 820)
+        self.resize(1150, 850)
         self.last_result = None
         self.last_batch_info = None
         self.last_cost_info = None
@@ -151,6 +153,31 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(cost_grid)
 
+        # trial mix section
+        trial_label = QLabel("Trial Mix Adjustment (after site trial batch)")
+        trial_label.setObjectName("sectionLabel")
+        form_layout.addWidget(trial_label)
+
+        trial_grid = QGridLayout()
+        trial_grid.setVerticalSpacing(12)
+        trial_grid.setHorizontalSpacing(10)
+
+        trial_grid.addWidget(QLabel("Actual Measured Slump (mm)"), 0, 0)
+        self.actual_slump_input = QLineEdit()
+        self.actual_slump_input.setPlaceholderText("e.g. 80")
+        trial_grid.addWidget(self.actual_slump_input, 0, 1)
+
+        trial_grid.addWidget(QLabel("Water Adjustment Rate (kg per 10mm)"), 1, 0)
+        self.water_adj_rate_input = QLineEdit("2.5")
+        trial_grid.addWidget(self.water_adj_rate_input, 1, 1)
+
+        form_layout.addLayout(trial_grid)
+
+        self.trial_btn = QPushButton("Compute Trial Adjustment")
+        self.trial_btn.setObjectName("trialBtn")
+        self.trial_btn.clicked.connect(self.on_trial_adjust)
+        form_layout.addWidget(self.trial_btn)
+
         save_label = QLabel("Project Name (for saving / report)")
         save_label.setObjectName("sectionLabel")
         form_layout.addWidget(save_label)
@@ -201,12 +228,14 @@ class MixDesignApp(QWidget):
         self.field_table = self.make_result_table()
         self.site_batch_table = self.make_result_table()
         self.cost_table = self.make_result_table()
+        self.trial_table = self.make_result_table()
         self.projects_tab = self.build_projects_tab()
 
         self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
         self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
         self.tabs.addTab(self.site_batch_table, "Site Batching")
         self.tabs.addTab(self.cost_table, "Cost Estimation")
+        self.tabs.addTab(self.trial_table, "Trial Mix Adjustment")
         self.tabs.addTab(self.projects_tab, "Saved Projects")
 
         result_layout.addWidget(self.tabs)
@@ -327,6 +356,34 @@ class MixDesignApp(QWidget):
 
         self.populate_results(result, batch_info, cost_info)
 
+    def on_trial_adjust(self):
+        if self.last_result is None:
+            QMessageBox.warning(self, "Calculate First", "Please calculate the mix design first.")
+            return
+
+        try:
+            actual_slump = float(self.actual_slump_input.text())
+            target_slump = float(self.slump_input.text())
+            adjustment_rate = float(self.water_adj_rate_input.text() or 2.5)
+        except ValueError:
+            self.error_label.setText("Please enter a valid actual slump value.")
+            return
+
+        trial_result = adjust_trial_mix(self.last_result, actual_slump, target_slump, adjustment_rate)
+
+        trial_rows = [
+            ("Target Slump", f'{trial_result["target_slump"]} mm'),
+            ("Actual Measured Slump", f'{trial_result["actual_slump"]} mm'),
+            ("Slump Difference", f'{trial_result["slump_difference"]} mm'),
+            ("Water Correction", f'{trial_result["water_correction"]} kg/m³'),
+            ("Adjusted Water", f'{trial_result["adjusted_water"]} kg/m³'),
+            ("Adjusted Cement", f'{trial_result["adjusted_cement"]} kg/m³'),
+            ("Water Change", f'{trial_result["water_change"]} kg/m³'),
+            ("Cement Change", f'{trial_result["cement_change"]} kg/m³'),
+        ]
+        self.fill_table(self.trial_table, trial_rows)
+        self.tabs.setCurrentWidget(self.trial_table)
+
     def populate_results(self, result, batch_info, cost_info):
         common_rows = [
             ("Slump Category", result["slump_category"]),
@@ -377,6 +434,9 @@ class MixDesignApp(QWidget):
         self.fill_table(self.field_table, field_rows)
         self.fill_table(self.site_batch_table, site_rows)
         self.fill_table(self.cost_table, cost_rows)
+
+        # naya calculate hote hi purana trial result clear kar do, warna purana confuse karega
+        self.trial_table.setRowCount(0)
 
     def fill_table(self, table, rows):
         table.setRowCount(len(rows))
@@ -556,6 +616,16 @@ class MixDesignApp(QWidget):
             }
             #calcBtn:hover {
                 background-color: #3d76e0;
+            }
+            #trialBtn {
+                background-color: #9b59b6;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border-radius: 6px;
+            }
+            #trialBtn:hover {
+                background-color: #8e44ad;
             }
             #saveBtn {
                 background-color: #2ecc71;
