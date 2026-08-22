@@ -14,7 +14,7 @@ class MixDesignApp(QWidget):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1")
         self.resize(1050, 720)
-        self.last_result = None   # calculate_mix ka result yahan store karenge, batch tab ke liye
+        self.last_result = None
         self.build_ui()
         self.apply_styles()
 
@@ -23,7 +23,6 @@ class MixDesignApp(QWidget):
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(25, 25, 25, 25)
 
-        # ---------- left card: inputs ----------
         form_card = QFrame()
         form_card.setObjectName("card")
         form_layout = QVBoxLayout(form_card)
@@ -95,7 +94,6 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(moisture_grid)
 
-        # batch section - kitna total concrete cast karna hai
         batch_label = QLabel("Batch / Site Quantity")
         batch_label.setObjectName("sectionLabel")
         form_layout.addWidget(batch_label)
@@ -126,7 +124,6 @@ class MixDesignApp(QWidget):
 
         form_layout.addStretch()
 
-        # ---------- right card: results ----------
         result_card = QFrame()
         result_card.setObjectName("card")
         result_layout = QVBoxLayout(result_card)
@@ -137,9 +134,9 @@ class MixDesignApp(QWidget):
 
         self.tabs = QTabWidget()
 
-        self.batch_design_table = self.make_result_table()   # per m3 dry
-        self.field_table = self.make_result_table()           # per m3 moisture adjusted
-        self.site_batch_table = self.make_result_table()      # per bag + total quantities
+        self.batch_design_table = self.make_result_table()
+        self.field_table = self.make_result_table()
+        self.site_batch_table = self.make_result_table()
 
         self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
         self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
@@ -243,6 +240,7 @@ class MixDesignApp(QWidget):
             QWidget {
                 background-color: #1e2530;
                 font-family: Segoe UI;
+                font-size: 13px;
                 color: #e6e9ef;
             }
             #card {
@@ -269,17 +267,34 @@ class MixDesignApp(QWidget):
             QLabel {
                 font-size: 13px;
                 color: #c4cad6;
+                background: transparent;
             }
-            QLineEdit, QComboBox {
-                background-color: #1a2029;
+            QLineEdit {
+                background-color: #ffffff;
                 border: 1px solid #38425a;
                 border-radius: 6px;
-                padding: 8px;
-                color: #ffffff;
+                padding: 6px 8px;
+                color: #000000;
                 font-size: 13px;
+                min-height: 22px;
             }
-            QLineEdit:focus, QComboBox:focus {
+            QLineEdit:focus {
                 border: 1px solid #4f8cff;
+            }
+            QComboBox {
+                background-color: #ffffff;
+                border: 1px solid #38425a;
+                border-radius: 6px;
+                padding: 6px 8px;
+                color: #000000;
+                font-size: 13px;
+                min-height: 22px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #ffffff;
+                color: #000000;
+                selection-background-color: #4f8cff;
+                selection-color: #ffffff;
             }
             #calcBtn {
                 background-color: #4f8cff;
@@ -303,6 +318,7 @@ class MixDesignApp(QWidget):
                 border: 1px solid #38425a;
                 border-radius: 6px;
                 gridline-color: #2c3547;
+                color: #ffffff;
             }
             QHeaderView::section {
                 background-color: #2c3547;
@@ -327,6 +343,7 @@ class MixDesignApp(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")   # ye line important hai - windows native style kabhi kabhi text color ignore kar deta hai
     window = MixDesignApp()
     window.show()
     sys.exit(app.exec())
