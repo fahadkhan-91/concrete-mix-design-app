@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QTableWidget,
     QTableWidgetItem, QFrame, QHeaderView, QTabWidget, QListWidget,
-    QListWidgetItem, QMessageBox
+    QListWidgetItem, QMessageBox, QScrollArea
 )
 from PySide6.QtCore import Qt
 
@@ -15,11 +15,11 @@ class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1")
-        self.resize(1100, 750)
+        self.resize(1150, 780)
         self.last_result = None
         self.last_batch_info = None
 
-        init_db()   # app khulte hi database/table ready ho jaye
+        init_db()
 
         self.build_ui()
         self.apply_styles()
@@ -30,11 +30,15 @@ class MixDesignApp(QWidget):
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(25, 25, 25, 25)
 
-        # ---------- left card: inputs ----------
+        # left side - scrollable input form
+        form_scroll = QScrollArea()
+        form_scroll.setWidgetResizable(True)
+        form_scroll.setObjectName("formScroll")
+
         form_card = QFrame()
         form_card.setObjectName("card")
         form_layout = QVBoxLayout(form_card)
-        form_layout.setSpacing(12)
+        form_layout.setSpacing(14)
 
         title = QLabel("Mix Design Inputs")
         title.setObjectName("title")
@@ -45,7 +49,7 @@ class MixDesignApp(QWidget):
         form_layout.addWidget(subtitle)
 
         grid = QGridLayout()
-        grid.setVerticalSpacing(10)
+        grid.setVerticalSpacing(12)
         grid.setHorizontalSpacing(10)
 
         grid.addWidget(QLabel("Target Strength f'ck (MPa)"), 0, 0)
@@ -76,12 +80,12 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(grid)
 
-        moisture_label = QLabel("Aggregate Moisture Correction (optional, 0 se start karo)")
+        moisture_label = QLabel("Aggregate Moisture Correction (optional, defaults to 0)")
         moisture_label.setObjectName("sectionLabel")
         form_layout.addWidget(moisture_label)
 
         moisture_grid = QGridLayout()
-        moisture_grid.setVerticalSpacing(10)
+        moisture_grid.setVerticalSpacing(12)
         moisture_grid.setHorizontalSpacing(10)
 
         moisture_grid.addWidget(QLabel("Fine Agg. Moisture (%)"), 0, 0)
@@ -107,7 +111,7 @@ class MixDesignApp(QWidget):
         form_layout.addWidget(batch_label)
 
         batch_grid = QGridLayout()
-        batch_grid.setVerticalSpacing(10)
+        batch_grid.setVerticalSpacing(12)
         batch_grid.setHorizontalSpacing(10)
 
         batch_grid.addWidget(QLabel("Total Volume Needed (m³)"), 0, 0)
@@ -120,8 +124,7 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(batch_grid)
 
-        # project name + save button row
-        save_label = QLabel("Project Name (save karne ke liye)")
+        save_label = QLabel("Project Name (for saving)")
         save_label.setObjectName("sectionLabel")
         form_layout.addWidget(save_label)
 
@@ -149,7 +152,9 @@ class MixDesignApp(QWidget):
 
         form_layout.addStretch()
 
-        # ---------- right card: results ----------
+        form_scroll.setWidget(form_card)
+
+        # right side - results
         result_card = QFrame()
         result_card.setObjectName("card")
         result_layout = QVBoxLayout(result_card)
@@ -172,7 +177,7 @@ class MixDesignApp(QWidget):
 
         result_layout.addWidget(self.tabs)
 
-        main_layout.addWidget(form_card, 1)
+        main_layout.addWidget(form_scroll, 1)
         main_layout.addWidget(result_card, 1)
 
     def build_projects_tab(self):
@@ -181,7 +186,7 @@ class MixDesignApp(QWidget):
 
         search_row = QHBoxLayout()
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Project search karo...")
+        self.search_input.setPlaceholderText("Search projects...")
         self.search_input.textChanged.connect(self.on_search_changed)
         search_row.addWidget(self.search_input)
         layout.addLayout(search_row)
@@ -257,7 +262,7 @@ class MixDesignApp(QWidget):
             volume_m3 = float(self.volume_input.text() or 1)
             bag_weight = float(self.bag_weight_input.text() or 50)
         except ValueError:
-            self.error_label.setText("Sab fields sahi se bharo — numbers hi likhne hain.")
+            self.error_label.setText("Please fill all fields correctly — numeric values only.")
             return
 
         result = calculate_mix(
@@ -319,15 +324,13 @@ class MixDesignApp(QWidget):
             table.setItem(i, 0, QTableWidgetItem(str(label)))
             table.setItem(i, 1, QTableWidgetItem(str(value)))
 
-    # ---------- project save/load/delete ----------
-
     def on_save_project(self):
         name = self.project_name_input.text().strip()
         if not name:
-            QMessageBox.warning(self, "Naam Chahiye", "Pehle project ka naam likho.")
+            QMessageBox.warning(self, "Name Required", "Please enter a project name first.")
             return
         if self.last_result is None:
-            QMessageBox.warning(self, "Calculate Karo Pehle", "Pehle 'Calculate Mix Design' dabao, phir save karo.")
+            QMessageBox.warning(self, "Calculate First", "Please calculate the mix design before saving.")
             return
 
         inputs = self.get_current_inputs()
@@ -336,7 +339,7 @@ class MixDesignApp(QWidget):
         save_project(name, inputs, combined_results)
         self.project_name_input.clear()
         self.refresh_projects_list()
-        QMessageBox.information(self, "Saved", f"Project '{name}' save ho gaya.")
+        QMessageBox.information(self, "Saved", f"Project '{name}' has been saved successfully.")
 
     def refresh_projects_list(self, keyword=None):
         self.projects_list.clear()
@@ -352,13 +355,13 @@ class MixDesignApp(QWidget):
     def on_load_project(self):
         selected = self.projects_list.currentItem()
         if not selected:
-            QMessageBox.warning(self, "Select Karo", "Pehle list se ek project select karo.")
+            QMessageBox.warning(self, "Select a Project", "Please select a project from the list first.")
             return
 
         project_id = selected.data(Qt.UserRole)
         inputs, results = get_project(project_id)
         if inputs is None:
-            QMessageBox.warning(self, "Error", "Project load nahi ho saka.")
+            QMessageBox.warning(self, "Error", "Failed to load the project.")
             return
 
         self.set_inputs(inputs)
@@ -366,17 +369,17 @@ class MixDesignApp(QWidget):
         self.last_batch_info = results["batch"]
         self.populate_results(results["mix"], results["batch"])
 
-        QMessageBox.information(self, "Loaded", "Project load ho gaya — results dekh lo dusre tabs mein.")
+        QMessageBox.information(self, "Loaded", "Project loaded successfully — view the results in the other tabs.")
 
     def on_delete_project(self):
         selected = self.projects_list.currentItem()
         if not selected:
-            QMessageBox.warning(self, "Select Karo", "Pehle list se ek project select karo.")
+            QMessageBox.warning(self, "Select a Project", "Please select a project from the list first.")
             return
 
         project_id = selected.data(Qt.UserRole)
         confirm = QMessageBox.question(
-            self, "Confirm Delete", "Pakka delete karna hai ye project?",
+            self, "Confirm Delete", "Are you sure you want to delete this project?",
             QMessageBox.Yes | QMessageBox.No
         )
         if confirm == QMessageBox.Yes:
@@ -390,6 +393,10 @@ class MixDesignApp(QWidget):
                 font-family: Segoe UI;
                 font-size: 13px;
                 color: #e6e9ef;
+            }
+            #formScroll {
+                border: none;
+                background: transparent;
             }
             #card {
                 background-color: #262e3d;
@@ -421,10 +428,10 @@ class MixDesignApp(QWidget):
                 background-color: #ffffff;
                 border: 1px solid #38425a;
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 8px;
                 color: #000000;
                 font-size: 13px;
-                min-height: 22px;
+                min-height: 24px;
             }
             QLineEdit:focus {
                 border: 1px solid #4f8cff;
@@ -433,10 +440,10 @@ class MixDesignApp(QWidget):
                 background-color: #ffffff;
                 border: 1px solid #38425a;
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 8px;
                 color: #000000;
                 font-size: 13px;
-                min-height: 22px;
+                min-height: 24px;
             }
             QComboBox QAbstractItemView {
                 background-color: #ffffff;
