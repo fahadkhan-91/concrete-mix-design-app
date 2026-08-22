@@ -196,3 +196,37 @@ def compute_cost_estimate(batch_info, cement_rate_per_bag, fine_rate_per_kg, coa
         "total_cost": round(total_cost, 2),
         "cost_per_m3": round(cost_per_m3, 2),
     }
+    def adjust_trial_mix(original_result, actual_slump, target_slump, water_adjustment_per_10mm=2.5):
+    """
+    original_result = calculate_mix() ka output (field quantities wala)
+    actual_slump = jo slump site pe trial batch mein actually mila (mm)
+    target_slump = jo slump design mein target tha (mm)
+    water_adjustment_per_10mm = kitna paani (kg/m3) adjust karna hai har 10mm difference par
+                                 (typical rule of thumb value hai, 2-3 kg reasonable range mein)
+    """
+    slump_difference = target_slump - actual_slump  # positive matlab actual slump kam aaya
+
+    water_correction = (slump_difference / 10) * water_adjustment_per_10mm
+
+    original_water = original_result["water_field"]
+    original_cement = original_result["cement_field"]
+    original_wc = original_result["wc_final"]
+
+    adjusted_water = original_water + water_correction
+
+    # w/c ratio same rakhne ke liye cement ko bhi proportionally adjust karo
+    adjusted_cement = adjusted_water / original_wc
+
+    cement_change = adjusted_cement - original_cement
+    water_change = adjusted_water - original_water
+
+    return {
+        "actual_slump": actual_slump,
+        "target_slump": target_slump,
+        "slump_difference": slump_difference,
+        "water_correction": round(water_correction, 2),
+        "adjusted_water": round(adjusted_water, 1),
+        "adjusted_cement": round(adjusted_cement, 1),
+        "water_change": round(water_change, 2),
+        "cement_change": round(cement_change, 2),
+    }
