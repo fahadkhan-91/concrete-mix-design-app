@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from logic.mix_design import calculate_mix, compute_batch_quantities
+from logic.mix_design import calculate_mix, compute_batch_quantities, compute_cost_estimate
 from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects
 
 
@@ -15,9 +15,10 @@ class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1")
-        self.resize(1150, 780)
+        self.resize(1150, 800)
         self.last_result = None
         self.last_batch_info = None
+        self.last_cost_info = None
 
         init_db()
 
@@ -30,7 +31,6 @@ class MixDesignApp(QWidget):
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(25, 25, 25, 25)
 
-        # left side - scrollable input form
         form_scroll = QScrollArea()
         form_scroll.setWidgetResizable(True)
         form_scroll.setObjectName("formScroll")
@@ -124,6 +124,33 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(batch_grid)
 
+        # cost rates section
+        cost_label = QLabel("Material Rates (for cost estimation)")
+        cost_label.setObjectName("sectionLabel")
+        form_layout.addWidget(cost_label)
+
+        cost_grid = QGridLayout()
+        cost_grid.setVerticalSpacing(12)
+        cost_grid.setHorizontalSpacing(10)
+
+        cost_grid.addWidget(QLabel("Cement Rate (per bag)"), 0, 0)
+        self.cement_rate_input = QLineEdit("0")
+        cost_grid.addWidget(self.cement_rate_input, 0, 1)
+
+        cost_grid.addWidget(QLabel("Fine Aggregate Rate (per kg)"), 1, 0)
+        self.fine_rate_input = QLineEdit("0")
+        cost_grid.addWidget(self.fine_rate_input, 1, 1)
+
+        cost_grid.addWidget(QLabel("Coarse Aggregate Rate (per kg)"), 2, 0)
+        self.coarse_rate_input = QLineEdit("0")
+        cost_grid.addWidget(self.coarse_rate_input, 2, 1)
+
+        cost_grid.addWidget(QLabel("Water Rate (per liter, optional)"), 3, 0)
+        self.water_rate_input = QLineEdit("0")
+        cost_grid.addWidget(self.water_rate_input, 3, 1)
+
+        form_layout.addLayout(cost_grid)
+
         save_label = QLabel("Project Name (for saving)")
         save_label.setObjectName("sectionLabel")
         form_layout.addWidget(save_label)
@@ -168,11 +195,13 @@ class MixDesignApp(QWidget):
         self.batch_design_table = self.make_result_table()
         self.field_table = self.make_result_table()
         self.site_batch_table = self.make_result_table()
+        self.cost_table = self.make_result_table()
         self.projects_tab = self.build_projects_tab()
 
         self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
         self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
         self.tabs.addTab(self.site_batch_table, "Site Batching")
+        self.tabs.addTab(self.cost_table, "Cost Estimation")
         self.tabs.addTab(self.projects_tab, "Saved Projects")
 
         result_layout.addWidget(self.tabs)
@@ -229,6 +258,10 @@ class MixDesignApp(QWidget):
             "coarse_absorption": self.coarse_absorption_input.text(),
             "volume": self.volume_input.text(),
             "bag_weight": self.bag_weight_input.text(),
+            "cement_rate": self.cement_rate_input.text(),
+            "fine_rate": self.fine_rate_input.text(),
+            "coarse_rate": self.coarse_rate_input.text(),
+            "water_rate": self.water_rate_input.text(),
         }
 
     def set_inputs(self, inputs):
@@ -243,6 +276,11 @@ class MixDesignApp(QWidget):
         self.coarse_absorption_input.setText(str(inputs["coarse_absorption"]))
         self.volume_input.setText(str(inputs["volume"]))
         self.bag_weight_input.setText(str(inputs["bag_weight"]))
+        # rate fields purane saved projects mein nahi hongi, isliye .get() safe hai
+        self.cement_rate_input.setText(str(inputs.get("cement_rate", "0")))
+        self.fine_rate_input.setText(str(inputs.get("fine_rate", "0")))
+        self.coarse_rate_input.setText(str(inputs.get("coarse_rate", "0")))
+        self.water_rate_input.setText(str(inputs.get("water_rate", "0")))
 
     def on_calculate(self):
         self.error_label.setText("")
@@ -261,6 +299,11 @@ class MixDesignApp(QWidget):
 
             volume_m3 = float(self.volume_input.text() or 1)
             bag_weight = float(self.bag_weight_input.text() or 50)
+
+            cement_rate = float(self.cement_rate_input.text() or 0)
+            fine_rate = float(self.fine_rate_input.text() or 0)
+            coarse_rate = float(self.coarse_rate_input.text() or 0)
+            water_rate = float(self.water_rate_input.text() or 0)
         except ValueError:
             self.error_label.setText("Please fill all fields correctly — numeric values only.")
             return
@@ -275,9 +318,12 @@ class MixDesignApp(QWidget):
         batch_info = compute_batch_quantities(result, volume_m3, bag_weight)
         self.last_batch_info = batch_info
 
-        self.populate_results(result, batch_info)
+        cost_info = compute_cost_estimate(batch_info, cement_rate, fine_rate, coarse_rate, water_rate)
+        self.last_cost_info = cost_info
 
-    def populate_results(self, result, batch_info):
+        self.populate_results(result, batch_info, cost_info)
+
+    def populate_results(self, result, batch_info, cost_info):
         common_rows = [
             ("Slump Category", result["slump_category"]),
             ("W/C Ratio (strength-based)", result["wc_strength"]),
@@ -314,9 +360,19 @@ class MixDesignApp(QWidget):
             ("Total Coarse Aggregate", f'{batch_info["total_coarse_kg"]} kg'),
         ]
 
+        cost_rows = [
+            ("Cement Cost", cost_info["cement_cost"]),
+            ("Fine Aggregate Cost", cost_info["fine_cost"]),
+            ("Coarse Aggregate Cost", cost_info["coarse_cost"]),
+            ("Water Cost", cost_info["water_cost"]),
+            ("— Total Cost —", cost_info["total_cost"]),
+            ("Cost per m³", cost_info["cost_per_m3"]),
+        ]
+
         self.fill_table(self.batch_design_table, batch_rows)
         self.fill_table(self.field_table, field_rows)
         self.fill_table(self.site_batch_table, site_rows)
+        self.fill_table(self.cost_table, cost_rows)
 
     def fill_table(self, table, rows):
         table.setRowCount(len(rows))
@@ -334,7 +390,11 @@ class MixDesignApp(QWidget):
             return
 
         inputs = self.get_current_inputs()
-        combined_results = {"mix": self.last_result, "batch": self.last_batch_info}
+        combined_results = {
+            "mix": self.last_result,
+            "batch": self.last_batch_info,
+            "cost": self.last_cost_info,
+        }
 
         save_project(name, inputs, combined_results)
         self.project_name_input.clear()
@@ -367,7 +427,12 @@ class MixDesignApp(QWidget):
         self.set_inputs(inputs)
         self.last_result = results["mix"]
         self.last_batch_info = results["batch"]
-        self.populate_results(results["mix"], results["batch"])
+        # purane saved projects mein cost data nahi hoga, isliye .get() safe hai
+        self.last_cost_info = results.get("cost", {
+            "cement_cost": 0, "fine_cost": 0, "coarse_cost": 0,
+            "water_cost": 0, "total_cost": 0, "cost_per_m3": 0
+        })
+        self.populate_results(results["mix"], results["batch"], self.last_cost_info)
 
         QMessageBox.information(self, "Loaded", "Project loaded successfully — view the results in the other tabs.")
 
