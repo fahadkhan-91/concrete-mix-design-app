@@ -175,3 +175,24 @@ def compute_batch_quantities(result, volume_m3=1.0, bag_weight=50):
         "total_fine_kg": round(total_fine, 1),
         "total_coarse_kg": round(total_coarse, 1),
     }
+def compute_cost_estimate(batch_info, cement_rate_per_bag, fine_rate_per_kg, coarse_rate_per_kg, water_rate_per_liter=0):
+    """
+    batch_info = compute_batch_quantities() ka output
+    rates = local currency mein (jo bhi currency user use kar raha ho)
+    """
+    cement_cost = batch_info["total_bags"] * cement_rate_per_bag
+    fine_cost = batch_info["total_fine_kg"] * fine_rate_per_kg
+    coarse_cost = batch_info["total_coarse_kg"] * coarse_rate_per_kg
+    water_cost = batch_info["total_water_kg"] * water_rate_per_liter  # 1 kg water ~ 1 liter
+
+    total_cost = cement_cost + fine_cost + coarse_cost + water_cost
+    cost_per_m3 = total_cost / batch_info["volume_m3"] if batch_info["volume_m3"] > 0 else 0
+
+    return {
+        "cement_cost": round(cement_cost, 2),
+        "fine_cost": round(fine_cost, 2),
+        "coarse_cost": round(coarse_cost, 2),
+        "water_cost": round(water_cost, 2),
+        "total_cost": round(total_cost, 2),
+        "cost_per_m3": round(cost_per_m3, 2),
+    }
