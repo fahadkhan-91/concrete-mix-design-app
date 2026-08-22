@@ -3,19 +3,20 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QTableWidget,
     QTableWidgetItem, QFrame, QHeaderView, QTabWidget, QListWidget,
-    QListWidgetItem, QMessageBox, QScrollArea
+    QListWidgetItem, QMessageBox, QScrollArea, QFileDialog
 )
 from PySide6.QtCore import Qt
 
 from logic.mix_design import calculate_mix, compute_batch_quantities, compute_cost_estimate
 from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects
+from report_generator import generate_pdf_report
 
 
 class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1")
-        self.resize(1150, 800)
+        self.resize(1150, 820)
         self.last_result = None
         self.last_batch_info = None
         self.last_cost_info = None
@@ -124,7 +125,6 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(batch_grid)
 
-        # cost rates section
         cost_label = QLabel("Material Rates (for cost estimation)")
         cost_label.setObjectName("sectionLabel")
         form_layout.addWidget(cost_label)
@@ -151,21 +151,27 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(cost_grid)
 
-        save_label = QLabel("Project Name (for saving)")
+        save_label = QLabel("Project Name (for saving / report)")
         save_label.setObjectName("sectionLabel")
         form_layout.addWidget(save_label)
 
-        save_row = QHBoxLayout()
         self.project_name_input = QLineEdit()
         self.project_name_input.setPlaceholderText("e.g. Site A - Column Mix")
-        save_row.addWidget(self.project_name_input)
+        form_layout.addWidget(self.project_name_input)
+
+        action_row = QHBoxLayout()
 
         self.save_btn = QPushButton("Save Project")
         self.save_btn.setObjectName("saveBtn")
         self.save_btn.clicked.connect(self.on_save_project)
-        save_row.addWidget(self.save_btn)
+        action_row.addWidget(self.save_btn)
 
-        form_layout.addLayout(save_row)
+        self.pdf_btn = QPushButton("Export PDF Report")
+        self.pdf_btn.setObjectName("pdfBtn")
+        self.pdf_btn.clicked.connect(self.on_export_pdf)
+        action_row.addWidget(self.pdf_btn)
+
+        form_layout.addLayout(action_row)
 
         self.calc_btn = QPushButton("Calculate Mix Design")
         self.calc_btn.setObjectName("calcBtn")
@@ -181,7 +187,6 @@ class MixDesignApp(QWidget):
 
         form_scroll.setWidget(form_card)
 
-        # right side - results
         result_card = QFrame()
         result_card.setObjectName("card")
         result_layout = QVBoxLayout(result_card)
@@ -276,7 +281,6 @@ class MixDesignApp(QWidget):
         self.coarse_absorption_input.setText(str(inputs["coarse_absorption"]))
         self.volume_input.setText(str(inputs["volume"]))
         self.bag_weight_input.setText(str(inputs["bag_weight"]))
-        # rate fields purane saved projects mein nahi hongi, isliye .get() safe hai
         self.cement_rate_input.setText(str(inputs.get("cement_rate", "0")))
         self.fine_rate_input.setText(str(inputs.get("fine_rate", "0")))
         self.coarse_rate_input.setText(str(inputs.get("coarse_rate", "0")))
@@ -401,6 +405,32 @@ class MixDesignApp(QWidget):
         self.refresh_projects_list()
         QMessageBox.information(self, "Saved", f"Project '{name}' has been saved successfully.")
 
+    def on_export_pdf(self):
+        if self.last_result is None:
+            QMessageBox.warning(self, "Calculate First", "Please calculate the mix design before exporting.")
+            return
+
+        default_name = self.project_name_input.text().strip() or "mix_design_report"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save PDF Report", f"{default_name}.pdf", "PDF Files (*.pdf)"
+        )
+        if not file_path:
+            return
+
+        inputs = self.get_current_inputs()
+        try:
+            generate_pdf_report(
+                file_path,
+                self.project_name_input.text().strip(),
+                inputs,
+                self.last_result,
+                self.last_batch_info,
+                self.last_cost_info
+            )
+            QMessageBox.information(self, "Exported", f"PDF report saved to:\n{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", f"Could not generate PDF:\n{str(e)}")
+
     def refresh_projects_list(self, keyword=None):
         self.projects_list.clear()
         rows = search_projects(keyword) if keyword else get_all_projects()
@@ -427,7 +457,6 @@ class MixDesignApp(QWidget):
         self.set_inputs(inputs)
         self.last_result = results["mix"]
         self.last_batch_info = results["batch"]
-        # purane saved projects mein cost data nahi hoga, isliye .get() safe hai
         self.last_cost_info = results.get("cost", {
             "cement_cost": 0, "fine_cost": 0, "coarse_cost": 0,
             "water_cost": 0, "total_cost": 0, "cost_per_m3": 0
@@ -537,6 +566,16 @@ class MixDesignApp(QWidget):
             }
             #saveBtn:hover {
                 background-color: #27ae60;
+            }
+            #pdfBtn {
+                background-color: #f39c12;
+                color: white;
+                font-weight: bold;
+                padding: 8px 14px;
+                border-radius: 6px;
+            }
+            #pdfBtn:hover {
+                background-color: #d68910;
             }
             #deleteBtn {
                 background-color: #e74c3c;
