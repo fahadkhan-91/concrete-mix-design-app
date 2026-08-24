@@ -71,11 +71,6 @@ def get_coarse_fraction(max_size, fm):
 def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand,
                    fine_moisture=0.0, fine_absorption=0.0,
                    coarse_moisture=0.0, coarse_absorption=0.0):
-    """
-    fine_moisture / coarse_moisture = actual moisture content of aggregate on site (%)
-    fine_absorption / coarse_absorption = aggregate's absorption capacity (%)
-    Agar site pe dry aggregate use ho raha ho to sab 0 rakh do, batch design values hi milengi.
-    """
     category = slump_category(slump)
 
     if exposure in ("moderate", "severe"):
@@ -101,17 +96,12 @@ def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand,
     vol_fine = 1000 - (vol_cement + vol_water + vol_coarse + vol_air)
     fine_weight = (vol_fine / 1000) * fine_sg * 1000
 
-    # yahan tak sab "dry / batch design" quantities hain - ab moisture correction lagayenge
-
-    # free moisture = jo moisture aggregate ke andar absorb nahi hui, balke bahar chipki hui hai
     fine_free_moisture = fine_moisture - fine_absorption
     coarse_free_moisture = coarse_moisture - coarse_absorption
 
-    # field weight - aggregate apna moisture bhi carry karega isliye weight badh jayega
     fine_field_weight = fine_weight * (1 + fine_moisture / 100)
     coarse_field_weight = coarse_weight * (1 + coarse_moisture / 100)
 
-    # extra pani jo aggregate se mix mein add ho raha hai, wo batch water se minus karna hai
     water_from_fine = fine_weight * (fine_free_moisture / 100)
     water_from_coarse = coarse_weight * (coarse_free_moisture / 100)
 
@@ -125,37 +115,30 @@ def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand,
         "air_percent": air_percent,
         "coarse_fraction": coarse_fraction,
 
-        # dry / batch design quantities (lab basis, no moisture)
         "water_batch": round(water, 1),
         "cement_batch": round(cement, 1),
         "coarse_batch": round(coarse_weight, 1),
         "fine_batch": round(fine_weight, 1),
 
-        # field quantities (actual site pe dalne wali quantity, moisture adjusted)
-        "cement_field": round(cement, 1),   # cement moisture se affect nahi hota
+        "cement_field": round(cement, 1),
         "fine_field": round(fine_field_weight, 1),
         "coarse_field": round(coarse_field_weight, 1),
         "water_field": round(field_water, 1),
     }
+
+
 def compute_batch_quantities(result, volume_m3=1.0, bag_weight=50):
-    """
-    result = calculate_mix() ka output
-    volume_m3 = kitna total concrete cast karna hai (m3 mein)
-    bag_weight = ek cement bag ka weight (kg), Pakistan mein aam tor pe 50kg hota hai
-    """
     cement_per_m3 = result["cement_field"]
     water_per_m3 = result["water_field"]
     fine_per_m3 = result["fine_field"]
     coarse_per_m3 = result["coarse_field"]
 
-    # ek bag ke against kitna paani/ret/bajri chahiye
     bags_per_m3 = cement_per_m3 / bag_weight
 
     water_per_bag = water_per_m3 / bags_per_m3
     fine_per_bag = fine_per_m3 / bags_per_m3
     coarse_per_bag = coarse_per_m3 / bags_per_m3
 
-    # poori job ke liye total quantities
     total_cement = cement_per_m3 * volume_m3
     total_water = water_per_m3 * volume_m3
     total_fine = fine_per_m3 * volume_m3
@@ -175,15 +158,13 @@ def compute_batch_quantities(result, volume_m3=1.0, bag_weight=50):
         "total_fine_kg": round(total_fine, 1),
         "total_coarse_kg": round(total_coarse, 1),
     }
+
+
 def compute_cost_estimate(batch_info, cement_rate_per_bag, fine_rate_per_kg, coarse_rate_per_kg, water_rate_per_liter=0):
-    """
-    batch_info = compute_batch_quantities() ka output
-    rates = local currency mein (jo bhi currency user use kar raha ho)
-    """
     cement_cost = batch_info["total_bags"] * cement_rate_per_bag
     fine_cost = batch_info["total_fine_kg"] * fine_rate_per_kg
     coarse_cost = batch_info["total_coarse_kg"] * coarse_rate_per_kg
-    water_cost = batch_info["total_water_kg"] * water_rate_per_liter  # 1 kg water ~ 1 liter
+    water_cost = batch_info["total_water_kg"] * water_rate_per_liter
 
     total_cost = cement_cost + fine_cost + coarse_cost + water_cost
     cost_per_m3 = total_cost / batch_info["volume_m3"] if batch_info["volume_m3"] > 0 else 0
@@ -196,15 +177,10 @@ def compute_cost_estimate(batch_info, cement_rate_per_bag, fine_rate_per_kg, coa
         "total_cost": round(total_cost, 2),
         "cost_per_m3": round(cost_per_m3, 2),
     }
-    def adjust_trial_mix(original_result, actual_slump, target_slump, water_adjustment_per_10mm=2.5):
-    """
-    original_result = calculate_mix() ka output (field quantities wala)
-    actual_slump = jo slump site pe trial batch mein actually mila (mm)
-    target_slump = jo slump design mein target tha (mm)
-    water_adjustment_per_10mm = kitna paani (kg/m3) adjust karna hai har 10mm difference par
-                                 (typical rule of thumb value hai, 2-3 kg reasonable range mein)
-    """
-    slump_difference = target_slump - actual_slump  # positive matlab actual slump kam aaya
+
+
+def adjust_trial_mix(original_result, actual_slump, target_slump, water_adjustment_per_10mm=2.5):
+    slump_difference = target_slump - actual_slump
 
     water_correction = (slump_difference / 10) * water_adjustment_per_10mm
 
@@ -213,8 +189,6 @@ def compute_cost_estimate(batch_info, cement_rate_per_bag, fine_rate_per_kg, coa
     original_wc = original_result["wc_final"]
 
     adjusted_water = original_water + water_correction
-
-    # w/c ratio same rakhne ke liye cement ko bhi proportionally adjust karo
     adjusted_cement = adjusted_water / original_wc
 
     cement_change = adjusted_cement - original_cement
