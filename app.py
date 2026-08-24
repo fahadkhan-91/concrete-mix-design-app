@@ -487,13 +487,21 @@ class MixDesignApp(QWidget):
 
         inputs = self.get_current_inputs()
         try:
+            # charts ko temporary PNG files ke tor pe save karo, PDF mein embed karne ke liye
+            import tempfile, os
+            temp_dir = tempfile.gettempdir()
+            pie_path = os.path.join(temp_dir, "mix_pie_chart.png")
+            bar_path = os.path.join(temp_dir, "mix_bar_chart.png")
+            self.charts_widget.save_charts_as_images(pie_path, bar_path)
+
             generate_pdf_report(
                 file_path,
                 self.project_name_input.text().strip(),
                 inputs,
                 self.last_result,
                 self.last_batch_info,
-                self.last_cost_info
+                self.last_cost_info,
+                chart_image_paths=(pie_path, bar_path)
             )
             QMessageBox.information(self, "Exported", f"PDF report saved to:\n{file_path}")
         except Exception as e:
