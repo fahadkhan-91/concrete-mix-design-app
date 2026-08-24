@@ -1,12 +1,12 @@
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from datetime import datetime
 
 
-def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info, cost_info):
+def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info, cost_info, chart_image_paths=None):
     doc = SimpleDocTemplate(file_path, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
 
@@ -23,7 +23,6 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
 
     elements = []
 
-    # header
     elements.append(Paragraph(f"Concrete Mix Design Report", title_style))
     elements.append(Paragraph(f"Project: {project_name or 'Untitled'}", subtitle_style))
     elements.append(Paragraph(
@@ -31,7 +30,6 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
         subtitle_style
     ))
 
-    # section 1: input parameters
     elements.append(Paragraph("1. Design Parameters", section_style))
     input_rows = [
         ["Parameter", "Value"],
@@ -43,7 +41,6 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
     ]
     elements.append(make_table(input_rows))
 
-    # section 2: mix design results
     elements.append(Paragraph("2. Mix Design Results (per m³)", section_style))
     mix_rows = [
         ["Parameter", "Value"],
@@ -57,7 +54,6 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
     ]
     elements.append(make_table(mix_rows))
 
-    # section 3: site batching
     elements.append(Paragraph("3. Site Batching Quantities", section_style))
     site_rows = [
         ["Parameter", "Value"],
@@ -71,7 +67,6 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
     ]
     elements.append(make_table(site_rows))
 
-    # section 4: cost estimation (agar rates diye gaye hon)
     if cost_info and cost_info.get("total_cost", 0) > 0:
         elements.append(Paragraph("4. Cost Estimation", section_style))
         cost_rows = [
@@ -84,6 +79,14 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
             ["Cost per m³", cost_info["cost_per_m3"]],
         ]
         elements.append(make_table(cost_rows))
+
+    # charts add karo agar diye gaye hon
+    if chart_image_paths:
+        pie_path, bar_path = chart_image_paths
+        elements.append(Paragraph("5. Visual Summary", section_style))
+        elements.append(Image(pie_path, width=8*cm, height=6.5*cm))
+        elements.append(Spacer(1, 10))
+        elements.append(Image(bar_path, width=8*cm, height=6.5*cm))
 
     elements.append(Spacer(1, 20))
     elements.append(Paragraph(
