@@ -439,9 +439,12 @@ class MixDesignApp(QWidget):
 
         self.trial_table.setRowCount(0)
 
-        # charts update karo
-        self.charts_widget.update_composition_chart(result)
-        self.charts_widget.update_cost_chart(cost_info)
+                # charts update karo
+        try:
+            self.charts_widget.update_composition_chart(result)
+            self.charts_widget.update_cost_chart(cost_info)
+        except Exception as e:
+            QMessageBox.critical(self, "Chart Error", f"Chart update failed:\n{str(e)}")
 
     def fill_table(self, table, rows):
         table.setRowCount(len(rows))
