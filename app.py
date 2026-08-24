@@ -12,13 +12,14 @@ from logic.mix_design import (
 )
 from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects
 from report_generator import generate_pdf_report
+from charts_widget import ChartsWidget
 
 
 class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1")
-        self.resize(1150, 850)
+        self.resize(1200, 880)
         self.last_result = None
         self.last_batch_info = None
         self.last_cost_info = None
@@ -153,7 +154,6 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(cost_grid)
 
-        # trial mix section
         trial_label = QLabel("Trial Mix Adjustment (after site trial batch)")
         trial_label.setObjectName("sectionLabel")
         form_layout.addWidget(trial_label)
@@ -229,6 +229,7 @@ class MixDesignApp(QWidget):
         self.site_batch_table = self.make_result_table()
         self.cost_table = self.make_result_table()
         self.trial_table = self.make_result_table()
+        self.charts_widget = ChartsWidget()
         self.projects_tab = self.build_projects_tab()
 
         self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
@@ -236,6 +237,7 @@ class MixDesignApp(QWidget):
         self.tabs.addTab(self.site_batch_table, "Site Batching")
         self.tabs.addTab(self.cost_table, "Cost Estimation")
         self.tabs.addTab(self.trial_table, "Trial Mix Adjustment")
+        self.tabs.addTab(self.charts_widget, "Charts")
         self.tabs.addTab(self.projects_tab, "Saved Projects")
 
         result_layout.addWidget(self.tabs)
@@ -435,8 +437,11 @@ class MixDesignApp(QWidget):
         self.fill_table(self.site_batch_table, site_rows)
         self.fill_table(self.cost_table, cost_rows)
 
-        # naya calculate hote hi purana trial result clear kar do, warna purana confuse karega
         self.trial_table.setRowCount(0)
+
+        # charts update karo
+        self.charts_widget.update_composition_chart(result)
+        self.charts_widget.update_cost_chart(cost_info)
 
     def fill_table(self, table, rows):
         table.setRowCount(len(rows))
