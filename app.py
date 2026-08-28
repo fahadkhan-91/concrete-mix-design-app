@@ -19,6 +19,7 @@ class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1")
+        self.setWindowIcon(QIcon('app_icon.ico'))
         self.resize(1200, 880)
         self.last_result = None
         self.last_batch_info = None
