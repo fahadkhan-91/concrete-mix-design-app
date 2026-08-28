@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QMessageBox, QScrollArea, QFileDialog
 )
 from PySide6.QtCore import Qt
-
+from PySide6.QtGui import QIcon
 from logic.mix_design import (
     calculate_mix, compute_batch_quantities, compute_cost_estimate, adjust_trial_mix
 )
