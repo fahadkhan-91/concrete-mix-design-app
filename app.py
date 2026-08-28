@@ -23,6 +23,7 @@ class MixDesignApp(QWidget):
         self.last_result = None
         self.last_batch_info = None
         self.last_cost_info = None
+        self.last_trial_result = None
 
         init_db()
 
@@ -372,7 +373,7 @@ class MixDesignApp(QWidget):
             return
 
         trial_result = adjust_trial_mix(self.last_result, actual_slump, target_slump, adjustment_rate)
-
+        self.last_trial_result = trial_result
         trial_rows = [
             ("Target Slump", f'{trial_result["target_slump"]} mm'),
             ("Actual Measured Slump", f'{trial_result["actual_slump"]} mm'),
@@ -438,7 +439,7 @@ class MixDesignApp(QWidget):
         self.fill_table(self.cost_table, cost_rows)
 
         self.trial_table.setRowCount(0)
-
+        self.last_trial_result = None
                 # charts update karo
         try:
             self.charts_widget.update_composition_chart(result)
@@ -487,12 +488,20 @@ class MixDesignApp(QWidget):
 
         inputs = self.get_current_inputs()
         try:
-            # charts ko temporary PNG files ke tor pe save karo, PDF mein embed karne ke liye
             import tempfile, os
             temp_dir = tempfile.gettempdir()
             pie_path = os.path.join(temp_dir, "mix_pie_chart.png")
             bar_path = os.path.join(temp_dir, "mix_bar_chart.png")
-            self.charts_widget.save_charts_as_images(pie_path, bar_path)
+            compare_path = os.path.join(temp_dir, "mix_compare_chart.png")
+            wc_path = os.path.join(temp_dir, "mix_wc_chart.png")
+            self.charts_widget.save_charts_as_images(pie_path, bar_path, compare_path, wc_path)
+
+            chart_paths = {
+                "pie": pie_path,
+                "bar": bar_path,
+                "compare": compare_path,
+                "wc": wc_path,
+            }
 
             generate_pdf_report(
                 file_path,
@@ -501,7 +510,8 @@ class MixDesignApp(QWidget):
                 self.last_result,
                 self.last_batch_info,
                 self.last_cost_info,
-                chart_image_paths=(pie_path, bar_path)
+                chart_image_paths=chart_paths,
+                trial_result=self.last_trial_result
             )
             QMessageBox.information(self, "Exported", f"PDF report saved to:\n{file_path}")
         except Exception as e:
