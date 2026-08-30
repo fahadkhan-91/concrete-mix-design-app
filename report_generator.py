@@ -9,7 +9,8 @@ from datetime import datetime
 
 
 def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
-                         cost_info, chart_image_paths=None, trial_result=None):
+                         cost_info, chart_image_paths=None, trial_result=None,
+                         method_name="ACI 211.1"):
     doc = SimpleDocTemplate(file_path, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
 
@@ -35,7 +36,7 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
     elements.append(Paragraph("Concrete Mix Design Report", title_style))
     elements.append(Paragraph(f"Project: {project_name or 'Untitled'}", subtitle_style))
     elements.append(Paragraph(
-        f"Method: ACI 211.1 &nbsp;&nbsp;|&nbsp;&nbsp; Generated: {datetime.now().strftime('%d %b %Y, %I:%M %p')}",
+        f"Method: {method_name} &nbsp;&nbsp;|&nbsp;&nbsp; Generated: {datetime.now().strftime('%d %b %Y, %I:%M %p')}",
         subtitle_style
     ))
 
@@ -43,14 +44,19 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
     elements.append(Paragraph("1. Input Summary", section_style))
 
     elements.append(Paragraph("Design Parameters", subsection_style))
+    is_method = "IS" in method_name
+
     design_rows = [
         ["Parameter", "Value"],
         ["Target Strength (f'ck)", f"{inputs['fck']} MPa"],
         ["Slump", f"{inputs['slump']} mm"],
         ["Max Aggregate Size", f"{inputs['max_agg_size']} mm"],
-        ["Exposure Condition", inputs['exposure'].capitalize()],
-        ["Fineness Modulus of Sand", inputs['fm_sand']],
+        ["Exposure Condition", inputs['exposure'].replace("_", " ").capitalize()],
     ]
+    if is_method:
+        design_rows.append(["Sand Zone", inputs.get('zone', 'II')])
+    else:
+        design_rows.append(["Fineness Modulus of Sand", inputs['fm_sand']])
     elements.append(make_table(design_rows))
 
     elements.append(Paragraph("Aggregate Moisture Correction", subsection_style))
@@ -88,15 +94,24 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
     elements.append(Paragraph("2. Mix Design Results", section_style))
 
     elements.append(Paragraph("Design Ratios", subsection_style))
-    ratio_rows = [
-        ["Parameter", "Value"],
+    ratio_rows = [["Parameter", "Value"]]
+
+    if "target_mean_strength" in mix_result:
+        ratio_rows.append(["Target Mean Strength", f'{mix_result["target_mean_strength"]} MPa'])
+        ratio_rows.append(["Standard Deviation Used", mix_result["std_deviation"]])
+
+    ratio_rows += [
         ["Slump Category", mix_result["slump_category"]],
-        ["W/C Ratio (strength-based)", mix_result["wc_strength"]],
+        ["W/C Ratio (strength/durability-based)", mix_result["wc_strength"]],
         ["W/C Ratio (exposure limit)", mix_result["wc_limit"]],
         ["Final W/C Ratio Used", mix_result["wc_final"]],
         ["Coarse Aggregate Fraction", mix_result["coarse_fraction"]],
         ["Air Content", f'{mix_result["air_percent"]}%'],
     ]
+
+    if "min_cement_required" in mix_result:
+        ratio_rows.append(["Minimum Cement Required (durability)", f'{mix_result["min_cement_required"]} kg/m³'])
+
     elements.append(make_table(ratio_rows))
 
     elements.append(Paragraph("Batch (Dry / Lab) Quantities — per m³", subsection_style))
@@ -188,7 +203,7 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
 
     elements.append(Spacer(1, 20))
     elements.append(Paragraph(
-        "This report is generated based on ACI 211.1 standard mix design procedure. "
+        f"This report is generated based on the {method_name} standard mix design procedure. "
         "Actual site trial mixes are recommended before full-scale production.",
         subtitle_style
     ))
@@ -209,6 +224,5 @@ def make_table(rows):
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("SPACEAFTER", (0, 0), (-1, -1), 10),
     ]))
     return table
