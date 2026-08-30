@@ -7,9 +7,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
+
 from logic.mix_design import (
-    calculate_mix, compute_batch_quantities, compute_cost_estimate, adjust_trial_mix
+    calculate_mix as calculate_mix_aci,
+    compute_batch_quantities, compute_cost_estimate, adjust_trial_mix
 )
+from logic.is10262 import calculate_mix as calculate_mix_is
 from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects
 from report_generator import generate_pdf_report
 from charts_widget import ChartsWidget
@@ -18,8 +21,8 @@ from charts_widget import ChartsWidget
 class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Concrete Mix Design — ACI 211.1")
-        self.setWindowIcon(QIcon('app_icon.ico'))
+        self.setWindowTitle("Concrete Mix Design — ACI 211.1 / IS 10262")
+        self.setWindowIcon(QIcon("app_icon.ico"))
         self.resize(1200, 880)
         self.last_result = None
         self.last_batch_info = None
@@ -50,9 +53,19 @@ class MixDesignApp(QWidget):
         title.setObjectName("title")
         form_layout.addWidget(title)
 
-        subtitle = QLabel("ACI 211.1 Standard Method")
+        subtitle = QLabel("Choose a design method below")
         subtitle.setObjectName("subtitle")
         form_layout.addWidget(subtitle)
+
+        # design method selector - drives which calculation engine runs
+        method_label = QLabel("Design Method")
+        method_label.setObjectName("sectionLabel")
+        form_layout.addWidget(method_label)
+
+        self.method_combo = QComboBox()
+        self.method_combo.addItems(["ACI 211.1", "IS 10262"])
+        self.method_combo.currentTextChanged.connect(self.on_method_changed)
+        form_layout.addWidget(self.method_combo)
 
         grid = QGridLayout()
         grid.setVerticalSpacing(12)
@@ -70,19 +83,26 @@ class MixDesignApp(QWidget):
 
         grid.addWidget(QLabel("Max Aggregate Size (mm)"), 2, 0)
         self.agg_size_combo = QComboBox()
-        self.agg_size_combo.addItems(["10", "20", "25", "40"])
+        self.agg_size_combo.addItems(["10", "20", "40"])
         self.agg_size_combo.setCurrentText("20")
         grid.addWidget(self.agg_size_combo, 2, 1)
 
         grid.addWidget(QLabel("Exposure Condition"), 3, 0)
         self.exposure_combo = QComboBox()
-        self.exposure_combo.addItems(["mild", "moderate", "severe"])
+        # 5 categories total - ACI only formally uses first 3, IS uses all 5
+        self.exposure_combo.addItems(["mild", "moderate", "severe", "very_severe", "extreme"])
         grid.addWidget(self.exposure_combo, 3, 1)
 
-        grid.addWidget(QLabel("Fineness Modulus of Sand"), 4, 0)
+        grid.addWidget(QLabel("Fineness Modulus of Sand (ACI)"), 4, 0)
         self.fm_input = QLineEdit()
         self.fm_input.setPlaceholderText("e.g. 2.6")
         grid.addWidget(self.fm_input, 4, 1)
+
+        grid.addWidget(QLabel("Sand Zone (IS 10262)"), 5, 0)
+        self.zone_combo = QComboBox()
+        self.zone_combo.addItems(["I", "II", "III", "IV"])
+        self.zone_combo.setCurrentText("II")
+        grid.addWidget(self.zone_combo, 5, 1)
 
         form_layout.addLayout(grid)
 
@@ -247,6 +267,15 @@ class MixDesignApp(QWidget):
         main_layout.addWidget(form_scroll, 1)
         main_layout.addWidget(result_card, 1)
 
+        self.on_method_changed(self.method_combo.currentText())
+
+    def on_method_changed(self, method_text):
+        # dono fields hamesha visible rehte hain, bas placeholder/labels se guide karte hain
+        # kaunsa field actually use hoga ye calculation ke waqt method se decide hota hai
+        is_aci = "ACI" in method_text
+        self.fm_input.setEnabled(is_aci)
+        self.zone_combo.setEnabled(not is_aci)
+
     def build_projects_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -285,11 +314,13 @@ class MixDesignApp(QWidget):
 
     def get_current_inputs(self):
         return {
+            "method": self.method_combo.currentText(),
             "fck": self.fck_input.text(),
             "slump": self.slump_input.text(),
             "max_agg_size": self.agg_size_combo.currentText(),
             "exposure": self.exposure_combo.currentText(),
             "fm_sand": self.fm_input.text(),
+            "zone": self.zone_combo.currentText(),
             "fine_moisture": self.fine_moisture_input.text(),
             "fine_absorption": self.fine_absorption_input.text(),
             "coarse_moisture": self.coarse_moisture_input.text(),
@@ -303,11 +334,13 @@ class MixDesignApp(QWidget):
         }
 
     def set_inputs(self, inputs):
+        self.method_combo.setCurrentText(inputs.get("method", "ACI 211.1"))
         self.fck_input.setText(str(inputs["fck"]))
         self.slump_input.setText(str(inputs["slump"]))
         self.agg_size_combo.setCurrentText(str(inputs["max_agg_size"]))
         self.exposure_combo.setCurrentText(str(inputs["exposure"]))
         self.fm_input.setText(str(inputs["fm_sand"]))
+        self.zone_combo.setCurrentText(str(inputs.get("zone", "II")))
         self.fine_moisture_input.setText(str(inputs["fine_moisture"]))
         self.fine_absorption_input.setText(str(inputs["fine_absorption"]))
         self.coarse_moisture_input.setText(str(inputs["coarse_moisture"]))
@@ -327,7 +360,8 @@ class MixDesignApp(QWidget):
             slump = float(self.slump_input.text())
             max_agg_size = int(self.agg_size_combo.currentText())
             exposure = self.exposure_combo.currentText()
-            fm_sand = float(self.fm_input.text())
+            fm_sand = float(self.fm_input.text() or 0)
+            zone = self.zone_combo.currentText()
 
             fine_moisture = float(self.fine_moisture_input.text() or 0)
             fine_absorption = float(self.fine_absorption_input.text() or 0)
@@ -345,11 +379,23 @@ class MixDesignApp(QWidget):
             self.error_label.setText("Please fill all fields correctly — numeric values only.")
             return
 
-        result = calculate_mix(
-            fck, slump, max_agg_size, exposure, fm_sand,
-            fine_moisture, fine_absorption,
-            coarse_moisture, coarse_absorption
-        )
+        method = self.method_combo.currentText()
+
+        if "ACI" in method:
+            # ACI formally only has 3 exposure categories - map extras down to severe
+            aci_exposure = exposure if exposure in ("mild", "moderate", "severe") else "severe"
+            result = calculate_mix_aci(
+                fck, slump, max_agg_size, aci_exposure, fm_sand,
+                fine_moisture, fine_absorption,
+                coarse_moisture, coarse_absorption
+            )
+        else:
+            result = calculate_mix_is(
+                fck, slump, max_agg_size, exposure, zone,
+                fine_moisture, fine_absorption,
+                coarse_moisture, coarse_absorption
+            )
+
         self.last_result = result
 
         batch_info = compute_batch_quantities(result, volume_m3, bag_weight)
@@ -375,6 +421,7 @@ class MixDesignApp(QWidget):
 
         trial_result = adjust_trial_mix(self.last_result, actual_slump, target_slump, adjustment_rate)
         self.last_trial_result = trial_result
+
         trial_rows = [
             ("Target Slump", f'{trial_result["target_slump"]} mm'),
             ("Actual Measured Slump", f'{trial_result["actual_slump"]} mm'),
@@ -397,6 +444,12 @@ class MixDesignApp(QWidget):
             ("Coarse Aggregate Fraction", result["coarse_fraction"]),
             ("Air Content", f'{result["air_percent"]}%'),
         ]
+
+        # IS 10262-only extra info, add karo agar present hai
+        if "target_mean_strength" in result:
+            common_rows.insert(0, ("Target Mean Strength", f'{result["target_mean_strength"]} MPa'))
+        if "min_cement_required" in result:
+            common_rows.append(("Minimum Cement Required", f'{result["min_cement_required"]} kg/m³'))
 
         batch_rows = common_rows + [
             ("Water (batch)", f'{result["water_batch"]} kg/m³'),
@@ -441,10 +494,12 @@ class MixDesignApp(QWidget):
 
         self.trial_table.setRowCount(0)
         self.last_trial_result = None
-                # charts update karo
+
         try:
             self.charts_widget.update_composition_chart(result)
             self.charts_widget.update_cost_chart(cost_info)
+            self.charts_widget.update_batch_vs_field_chart(result)
+            self.charts_widget.update_wc_ratio_chart(result)
         except Exception as e:
             QMessageBox.critical(self, "Chart Error", f"Chart update failed:\n{str(e)}")
 
@@ -512,7 +567,8 @@ class MixDesignApp(QWidget):
                 self.last_batch_info,
                 self.last_cost_info,
                 chart_image_paths=chart_paths,
-                trial_result=self.last_trial_result
+                trial_result=self.last_trial_result,
+                method_name=inputs["method"]
             )
             QMessageBox.information(self, "Exported", f"PDF report saved to:\n{file_path}")
         except Exception as e:
@@ -548,6 +604,7 @@ class MixDesignApp(QWidget):
             "cement_cost": 0, "fine_cost": 0, "coarse_cost": 0,
             "water_cost": 0, "total_cost": 0, "cost_per_m3": 0
         })
+        self.last_trial_result = None
         self.populate_results(results["mix"], results["batch"], self.last_cost_info)
 
         QMessageBox.information(self, "Loaded", "Project loaded successfully — view the results in the other tabs.")
@@ -614,6 +671,10 @@ class MixDesignApp(QWidget):
                 font-size: 13px;
                 min-height: 24px;
             }
+            QLineEdit:disabled {
+                background-color: #cfd3da;
+                color: #6b6b6b;
+            }
             QLineEdit:focus {
                 border: 1px solid #4f8cff;
             }
@@ -625,6 +686,10 @@ class MixDesignApp(QWidget):
                 color: #000000;
                 font-size: 13px;
                 min-height: 24px;
+            }
+            QComboBox:disabled {
+                background-color: #cfd3da;
+                color: #6b6b6b;
             }
             QComboBox QAbstractItemView {
                 background-color: #ffffff;
