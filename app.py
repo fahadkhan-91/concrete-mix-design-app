@@ -210,7 +210,7 @@ class MixDesignApp(QWidget):
 
         action_row = QHBoxLayout()
 
-        self.save_btn = QPushButton("Save Project")
+        self.save_btn = QPushButton("💾  Save Project")
         self.save_btn.setObjectName("saveBtn")
         self.save_btn.clicked.connect(self.on_save_project)
         action_row.addWidget(self.save_btn)
