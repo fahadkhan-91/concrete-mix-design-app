@@ -222,7 +222,7 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(action_row)
 
-        self.calc_btn = QPushButton("Calculate Mix Design")
+        self.calc_btn = QPushButton("🧮  Calculate Mix Design")
         self.calc_btn.setObjectName("calcBtn")
         self.calc_btn.clicked.connect(self.on_calculate)
         form_layout.addWidget(self.calc_btn)
