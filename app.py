@@ -195,7 +195,7 @@ class MixDesignApp(QWidget):
 
         form_layout.addLayout(trial_grid)
 
-        self.trial_btn = QPushButton("Compute Trial Adjustment")
+        self.trial_btn = QPushButton("🔧  Compute Trial Adjustment")
         self.trial_btn.setObjectName("trialBtn")
         self.trial_btn.clicked.connect(self.on_trial_adjust)
         form_layout.addWidget(self.trial_btn)
