@@ -215,7 +215,7 @@ class MixDesignApp(QWidget):
         self.save_btn.clicked.connect(self.on_save_project)
         action_row.addWidget(self.save_btn)
 
-        self.pdf_btn = QPushButton("Export PDF Report")
+        self.pdf_btn = QPushButton("📄  Export PDF Report")
         self.pdf_btn.setObjectName("pdfBtn")
         self.pdf_btn.clicked.connect(self.on_export_pdf)
         action_row.addWidget(self.pdf_btn)
