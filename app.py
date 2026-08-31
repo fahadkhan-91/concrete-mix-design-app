@@ -624,11 +624,11 @@ class MixDesignApp(QWidget):
             delete_project(project_id)
             self.refresh_projects_list()
 
-    def apply_styles(self):
+        def apply_styles(self):
         self.setStyleSheet("""
             QWidget {
-                background-color: #1e2530;
-                font-family: Segoe UI;
+                background-color: #1a1f2b;
+                font-family: 'Segoe UI', sans-serif;
                 font-size: 13px;
                 color: #e6e9ef;
             }
@@ -637,25 +637,29 @@ class MixDesignApp(QWidget):
                 background: transparent;
             }
             #card {
-                background-color: #262e3d;
-                border-radius: 12px;
-                padding: 20px;
+                background-color: #242b3a;
+                border: 1px solid #313b52;
+                border-radius: 14px;
+                padding: 24px;
             }
             #title {
-                font-size: 20px;
-                font-weight: bold;
+                font-size: 21px;
+                font-weight: 600;
                 color: #ffffff;
+                letter-spacing: 0.2px;
             }
             #subtitle {
                 font-size: 12px;
                 color: #8b94a8;
-                margin-bottom: 6px;
+                margin-bottom: 10px;
             }
             #sectionLabel {
-                font-size: 13px;
-                font-weight: bold;
-                color: #4f8cff;
-                margin-top: 8px;
+                font-size: 12px;
+                font-weight: 600;
+                color: #6ea3ff;
+                margin-top: 14px;
+                letter-spacing: 0.3px;
+                text-transform: uppercase;
             }
             QLabel {
                 font-size: 13px;
@@ -664,10 +668,10 @@ class MixDesignApp(QWidget):
             }
             QLineEdit {
                 background-color: #ffffff;
-                border: 1px solid #38425a;
-                border-radius: 6px;
-                padding: 8px;
-                color: #000000;
+                border: 1.5px solid #3a4560;
+                border-radius: 8px;
+                padding: 9px 10px;
+                color: #16191f;
                 font-size: 13px;
                 min-height: 24px;
             }
@@ -676,14 +680,14 @@ class MixDesignApp(QWidget):
                 color: #6b6b6b;
             }
             QLineEdit:focus {
-                border: 1px solid #4f8cff;
+                border: 1.5px solid #4f8cff;
             }
             QComboBox {
                 background-color: #ffffff;
-                border: 1px solid #38425a;
-                border-radius: 6px;
-                padding: 8px;
-                color: #000000;
+                border: 1.5px solid #3a4560;
+                border-radius: 8px;
+                padding: 9px 10px;
+                color: #16191f;
                 font-size: 13px;
                 min-height: 24px;
             }
@@ -700,21 +704,26 @@ class MixDesignApp(QWidget):
             #calcBtn {
                 background-color: #4f8cff;
                 color: white;
-                font-weight: bold;
+                font-weight: 600;
                 font-size: 14px;
-                padding: 12px;
-                border-radius: 8px;
-                margin-top: 10px;
+                padding: 13px;
+                border-radius: 10px;
+                border: none;
+                margin-top: 12px;
             }
             #calcBtn:hover {
                 background-color: #3d76e0;
             }
+            #calcBtn:pressed {
+                background-color: #2e5fc4;
+            }
             #trialBtn {
                 background-color: #9b59b6;
                 color: white;
-                font-weight: bold;
-                padding: 10px;
-                border-radius: 6px;
+                font-weight: 600;
+                padding: 11px;
+                border-radius: 8px;
+                border: none;
             }
             #trialBtn:hover {
                 background-color: #8e44ad;
@@ -722,9 +731,10 @@ class MixDesignApp(QWidget):
             #saveBtn {
                 background-color: #2ecc71;
                 color: white;
-                font-weight: bold;
-                padding: 8px 14px;
-                border-radius: 6px;
+                font-weight: 600;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
             }
             #saveBtn:hover {
                 background-color: #27ae60;
@@ -732,9 +742,10 @@ class MixDesignApp(QWidget):
             #pdfBtn {
                 background-color: #f39c12;
                 color: white;
-                font-weight: bold;
-                padding: 8px 14px;
-                border-radius: 6px;
+                font-weight: 600;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
             }
             #pdfBtn:hover {
                 background-color: #d68910;
@@ -742,9 +753,10 @@ class MixDesignApp(QWidget):
             #deleteBtn {
                 background-color: #e74c3c;
                 color: white;
-                font-weight: bold;
-                padding: 8px 14px;
-                border-radius: 6px;
+                font-weight: 600;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
             }
             #deleteBtn:hover {
                 background-color: #c0392b;
@@ -752,35 +764,62 @@ class MixDesignApp(QWidget):
             #errorLabel {
                 color: #ff6b6b;
                 font-size: 12px;
-                margin-top: 6px;
+                margin-top: 8px;
             }
             QTableWidget, QListWidget {
-                background-color: #1a2029;
-                border: 1px solid #38425a;
-                border-radius: 6px;
+                background-color: #1a1f2b;
+                border: 1px solid #313b52;
+                border-radius: 10px;
                 gridline-color: #2c3547;
                 color: #ffffff;
+                selection-background-color: #2e3a52;
+            }
+            QTableWidget::item, QListWidget::item {
+                padding: 6px 4px;
             }
             QHeaderView::section {
                 background-color: #2c3547;
                 color: #ffffff;
-                padding: 6px;
+                padding: 8px;
                 border: none;
-                font-weight: bold;
+                font-weight: 600;
+                font-size: 12px;
+            }
+            QTabWidget::pane {
+                border: none;
+                margin-top: 4px;
             }
             QTabBar::tab {
-                background-color: #1a2029;
+                background-color: #1a1f2b;
                 color: #8b94a8;
-                padding: 8px 16px;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
+                padding: 9px 18px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                font-size: 12px;
+                margin-right: 2px;
             }
             QTabBar::tab:selected {
                 background-color: #4f8cff;
                 color: white;
+                font-weight: 600;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #2c3547;
+            }
+            QScrollBar:vertical {
+                background: #1a1f2b;
+                width: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #3a4560;
+                border-radius: 5px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #4f8cff;
             }
         """)
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
