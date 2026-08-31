@@ -118,19 +118,16 @@ The installer is created in the `Output/` folder.
 
 ## Project Structure
 
-\`\`\`
-concrete-mix-design-app/
-├── app.py                  # Main PySide6 application (UI + orchestration)
-├── logic/
-│   ├── mix_design.py       # ACI 211.1 calculation engine
-│   └── is10262.py          # IS 10262:2019 calculation engine
-├── database.py              # SQLite save/load/search/delete for projects
-├── charts_widget.py         # Matplotlib chart widgets
-├── report_generator.py      # PDF report generation (ReportLab)
-├── app_icon.ico              # Application icon
-├── ConcreteMixDesign.iss     # Inno Setup installer script
-└── requirements.txt
-\`\`\`
+- `app.py` — Main PySide6 application (UI + orchestration)
+- `logic/`
+  - `mix_design.py` — ACI 211.1 calculation engine
+  - `is10262.py` — IS 10262:2019 calculation engine
+- `database.py` — SQLite save/load/search/delete for projects
+- `charts_widget.py` — Matplotlib chart widgets
+- `report_generator.py` — PDF report generation (ReportLab)
+- `app_icon.ico` — Application icon
+- `ConcreteMixDesign.iss` — Inno Setup installer script
+- `requirements.txt`
 
 
 ## Tech Stack
