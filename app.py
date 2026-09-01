@@ -426,6 +426,8 @@ class MixDesignApp(QWidget):
 
     def on_calculate(self):
         self.error_label.setText("")
+        self.calc_btn.setEnabled(False)
+        self.calc_btn.setText("⏳  Calculating...")
 
         try:
             fck = float(self.fck_input.text())
@@ -477,6 +479,8 @@ class MixDesignApp(QWidget):
         self.last_cost_info = cost_info
 
         self.populate_results(result, batch_info, cost_info)
+        self.calc_btn.setEnabled(True)
+        self.calc_btn.setText("🧮  Calculate Mix Design")
 
     def on_trial_adjust(self):
         if self.last_result is None:
@@ -615,6 +619,11 @@ class MixDesignApp(QWidget):
             return
 
         inputs = self.get_current_inputs()
+
+        self.pdf_btn.setEnabled(False)
+        self.pdf_btn.setText("⏳  Generating...")
+        QApplication.processEvents()   # UI turant update ho, button ka naya text turant dikhe
+
         try:
             import tempfile, os
             temp_dir = tempfile.gettempdir()
@@ -645,6 +654,9 @@ class MixDesignApp(QWidget):
             QMessageBox.information(self, "Exported", f"PDF report saved to:\n{file_path}")
         except Exception as e:
             QMessageBox.critical(self, "Export Failed", f"Could not generate PDF:\n{str(e)}")
+        finally:
+            self.pdf_btn.setEnabled(True)
+            self.pdf_btn.setText("📄  Export PDF Report")
 
     def refresh_projects_list(self, keyword=None):
         self.projects_list.clear()
