@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QWidget, QGridLayout
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
+import mplcursors
 
 # consistent color palette - har material ka rang hamesha same rahega har chart mein
 COLOR_CEMENT = "#4f8cff"
@@ -21,7 +22,6 @@ class ChartsWidget(QWidget):
         layout = QGridLayout(self)
         layout.setSpacing(15)
 
-        # 4 charts, 2x2 grid - sab consistent size ke
         self.pie_figure = Figure(figsize=(5, 4), facecolor=BG_DARK)
         self.pie_canvas = FigureCanvasQTAgg(self.pie_figure)
         layout.addWidget(self.pie_canvas, 0, 0)
@@ -38,6 +38,45 @@ class ChartsWidget(QWidget):
         self.wc_canvas = FigureCanvasQTAgg(self.wc_figure)
         layout.addWidget(self.wc_canvas, 1, 1)
 
+        # scroll-wheel se zoom karne ke liye, har canvas pe connect karo
+        for canvas in (self.pie_canvas, self.bar_canvas, self.compare_canvas, self.wc_canvas):
+            canvas.mpl_connect("scroll_event", self._on_scroll_zoom)
+
+        # active cursors ko track karo taake dobara draw karne se pehle purane hata sakein
+        self._active_cursors = []
+
+    def _on_scroll_zoom(self, event):
+        # sirf us chart pe zoom karo jispe mouse hai
+        ax = event.inaxes
+        if ax is None:
+            return
+
+        scale_factor = 0.85 if event.button == "up" else 1.15  # scroll up = zoom in
+
+        cur_xlim = ax.get_xlim()
+        cur_ylim = ax.get_ylim()
+        xdata, ydata = event.xdata, event.ydata
+        if xdata is None or ydata is None:
+            return
+
+        new_width = (cur_xlim[1] - cur_xlim[0]) * scale_factor
+        new_height = (cur_ylim[1] - cur_ylim[0]) * scale_factor
+
+        relx = (cur_xlim[1] - xdata) / (cur_xlim[1] - cur_xlim[0])
+        rely = (cur_ylim[1] - ydata) / (cur_ylim[1] - cur_ylim[0])
+
+        ax.set_xlim([xdata - new_width * (1 - relx), xdata + new_width * relx])
+        ax.set_ylim([ydata - new_height * (1 - rely), ydata + new_height * rely])
+        ax.figure.canvas.draw_idle()
+
+    def _clear_cursors(self):
+        for cursor in self._active_cursors:
+            try:
+                cursor.remove()
+            except Exception:
+                pass
+        self._active_cursors = []
+
     def _style_axis(self, ax, facecolor):
         ax.set_facecolor(facecolor)
         ax.tick_params(colors=TEXT_COLOR, labelsize=8)
@@ -45,6 +84,13 @@ class ChartsWidget(QWidget):
             spine.set_color(GRID_COLOR)
         ax.grid(axis="y", color=GRID_COLOR, linewidth=0.5, alpha=0.5)
         ax.set_axisbelow(True)
+
+    def _style_tooltip(self, cursor):
+        # dark theme ke sath match karne wala tooltip box
+        cursor.connect("add", lambda sel: sel.annotation.get_bbox_patch().set(
+            fc="#1a2029", ec="#4f8cff", alpha=0.95
+        ))
+        cursor.connect("add", lambda sel: sel.annotation.set_color("white"))
 
     # ---------- Chart 1: Mix Composition Pie ----------
     def update_composition_chart(self, result):
@@ -72,6 +118,15 @@ class ChartsWidget(QWidget):
         )
         ax.set_title("Mix Composition (by weight)", color="white", fontsize=11, pad=10)
         self.pie_figure.subplots_adjust(top=0.88, bottom=0.2)
+
+        # hover tooltip - exact kg aur % dikhayega
+        cursor = mplcursors.cursor(wedges, hover=True)
+        cursor.connect("add", lambda sel: sel.annotation.set_text(
+            f"{labels[sel.index]}: {values[sel.index]:.1f} kg/m³"
+        ))
+        self._style_tooltip(cursor)
+        self._active_cursors.append(cursor)
+
         self.pie_canvas.draw()
 
     # ---------- Chart 2: Cost Breakdown Bar ----------
@@ -101,6 +156,15 @@ class ChartsWidget(QWidget):
                     ha="center", va="bottom", color="white", fontsize=8)
 
         self.bar_figure.subplots_adjust(top=0.88, bottom=0.15, left=0.15, right=0.95)
+
+        cursor = mplcursors.cursor(bars, hover=True)
+        clean_labels = ["Cement", "Fine Aggregate", "Coarse Aggregate", "Water"]
+        cursor.connect("add", lambda sel: sel.annotation.set_text(
+            f"{clean_labels[sel.index]}: {values[sel.index]:,.0f}"
+        ))
+        self._style_tooltip(cursor)
+        self._active_cursors.append(cursor)
+
         self.bar_canvas.draw()
 
     # ---------- Chart 3: Batch vs Field Comparison ----------
@@ -110,6 +174,7 @@ class ChartsWidget(QWidget):
         self._style_axis(ax, BG_DARKER)
 
         categories = ["Water", "Cement", "Fine\nAgg.", "Coarse\nAgg."]
+        clean_categories = ["Water", "Cement", "Fine Aggregate", "Coarse Aggregate"]
         batch_values = [
             result["water_batch"], result["cement_batch"],
             result["fine_batch"], result["coarse_batch"]
@@ -134,6 +199,21 @@ class ChartsWidget(QWidget):
                   frameon=False, labelcolor="white", fontsize=8)
 
         self.compare_figure.subplots_adjust(top=0.88, bottom=0.22, left=0.12, right=0.95)
+
+        cursor1 = mplcursors.cursor(bars1, hover=True)
+        cursor1.connect("add", lambda sel: sel.annotation.set_text(
+            f"{clean_categories[sel.index]} (Batch): {batch_values[sel.index]:.1f} kg/m³"
+        ))
+        self._style_tooltip(cursor1)
+        self._active_cursors.append(cursor1)
+
+        cursor2 = mplcursors.cursor(bars2, hover=True)
+        cursor2.connect("add", lambda sel: sel.annotation.set_text(
+            f"{clean_categories[sel.index]} (Field): {field_values[sel.index]:.1f} kg/m³"
+        ))
+        self._style_tooltip(cursor2)
+        self._active_cursors.append(cursor2)
+
         self.compare_canvas.draw()
 
     # ---------- Chart 4: W/C Ratio Comparison ----------
@@ -143,6 +223,7 @@ class ChartsWidget(QWidget):
         self._style_axis(ax, BG_DARKER)
 
         labels = ["Strength-\nBased", "Exposure\nLimit", "Final\nUsed"]
+        clean_labels = ["Strength-Based", "Exposure Limit", "Final Used"]
         values = [result["wc_strength"], result["wc_limit"], result["wc_final"]]
         colors = ["#5b6b8c", "#e74c3c", COLOR_CEMENT]
 
@@ -156,6 +237,14 @@ class ChartsWidget(QWidget):
                     va="center", ha="left", color="white", fontsize=9)
 
         self.wc_figure.subplots_adjust(top=0.85, bottom=0.15, left=0.22, right=0.9)
+
+        cursor = mplcursors.cursor(bars, hover=True)
+        cursor.connect("add", lambda sel: sel.annotation.set_text(
+            f"{clean_labels[sel.index]}: {values[sel.index]:.3f}"
+        ))
+        self._style_tooltip(cursor)
+        self._active_cursors.append(cursor)
+
         self.wc_canvas.draw()
 
     def save_charts_as_images(self, pie_path, bar_path, compare_path=None, wc_path=None):
