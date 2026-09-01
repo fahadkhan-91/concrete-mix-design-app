@@ -709,7 +709,7 @@ class MixDesignApp(QWidget):
             self.refresh_projects_list()
 
         def apply_styles(self):
-        self.setStyleSheet("""
+            self.setStyleSheet("""
             QWidget {
                 background-color: #1a1f2b;
                 font-family: 'Segoe UI', sans-serif;
