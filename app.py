@@ -64,6 +64,9 @@ class MixDesignApp(QWidget):
 
         self.method_combo = QComboBox()
         self.method_combo.addItems(["ACI 211.1", "IS 10262"])
+        self.method_combo.setToolTip(
+            "Choose which standard's tables and procedure to use for the mix design calculation."
+        )
         self.method_combo.currentTextChanged.connect(self.on_method_changed)
         form_layout.addWidget(self.method_combo)
 
@@ -75,34 +78,60 @@ class MixDesignApp(QWidget):
         self.fck_input = QLineEdit()
         self.fck_input.setPlaceholderText("e.g. 30")
         grid.addWidget(self.fck_input, 0, 1)
+        self.fck_input.setToolTip(
+            "Target compressive strength of concrete (f'ck) in MPa.\n"
+            "This is the design strength specified by the structural engineer,\n"
+            "e.g. M25 concrete = 25 MPa."
+        )
 
         grid.addWidget(QLabel("Slump (mm)"), 1, 0)
         self.slump_input = QLineEdit()
         self.slump_input.setPlaceholderText("e.g. 100")
         grid.addWidget(self.slump_input, 1, 1)
+        self.slump_input.setToolTip(
+            "Desired workability of fresh concrete, measured by the slump test (mm).\n"
+            "Higher slump = more flowable mix. Typical range: 25-150mm."
+        )
 
         grid.addWidget(QLabel("Max Aggregate Size (mm)"), 2, 0)
         self.agg_size_combo = QComboBox()
         self.agg_size_combo.addItems(["10", "20", "40"])
         self.agg_size_combo.setCurrentText("20")
         grid.addWidget(self.agg_size_combo, 2, 1)
+        self.agg_size_combo.setToolTip(
+            "Maximum nominal size of coarse aggregate (mm) used in the mix.\n"
+            "Larger aggregate generally needs less cement paste."
+        )
 
         grid.addWidget(QLabel("Exposure Condition"), 3, 0)
         self.exposure_combo = QComboBox()
-        # 5 categories total - ACI only formally uses first 3, IS uses all 5
         self.exposure_combo.addItems(["mild", "moderate", "severe", "very_severe", "extreme"])
         grid.addWidget(self.exposure_combo, 3, 1)
+        self.exposure_combo.setToolTip(
+            "Environmental exposure condition of the structure.\n"
+            "Determines durability requirements (max w/c ratio, min cement, air content).\n"
+            "Mild: indoor/protected. Severe/Extreme: marine, chemical, or harsh weather exposure."
+        )
 
         grid.addWidget(QLabel("Fineness Modulus of Sand (ACI)"), 4, 0)
         self.fm_input = QLineEdit()
         self.fm_input.setPlaceholderText("e.g. 2.6")
         grid.addWidget(self.fm_input, 4, 1)
+        self.fm_input.setToolTip(
+            "Fineness Modulus of sand — a single number describing particle size distribution.\n"
+            "Typical range: 2.3 (fine sand) to 3.1 (coarse sand). Used only for ACI 211.1.\n"
+            "Obtained from a sieve analysis test."
+        )
 
         grid.addWidget(QLabel("Sand Zone (IS 10262)"), 5, 0)
         self.zone_combo = QComboBox()
         self.zone_combo.addItems(["I", "II", "III", "IV"])
         self.zone_combo.setCurrentText("II")
         grid.addWidget(self.zone_combo, 5, 1)
+        self.zone_combo.setToolTip(
+            "Grading zone of fine aggregate as per IS 383 (Zone I = coarsest, Zone IV = finest).\n"
+            "Used only for IS 10262. Determined from a sieve analysis test."
+        )
 
         form_layout.addLayout(grid)
 
@@ -117,18 +146,32 @@ class MixDesignApp(QWidget):
         moisture_grid.addWidget(QLabel("Fine Agg. Moisture (%)"), 0, 0)
         self.fine_moisture_input = QLineEdit("0")
         moisture_grid.addWidget(self.fine_moisture_input, 0, 1)
+        self.fine_moisture_input.setToolTip(
+            "Total moisture content currently present in the fine aggregate (%), measured on site.\n"
+            "Leave at 0 if using dry (oven-dried) aggregate for lab-only calculations."
+        )
 
         moisture_grid.addWidget(QLabel("Fine Agg. Absorption (%)"), 1, 0)
         self.fine_absorption_input = QLineEdit("0")
         moisture_grid.addWidget(self.fine_absorption_input, 1, 1)
+        self.fine_absorption_input.setToolTip(
+            "Water absorption capacity of the fine aggregate (%) — how much water it can\n"
+            "absorb internally without contributing free water to the mix."
+        )
 
         moisture_grid.addWidget(QLabel("Coarse Agg. Moisture (%)"), 2, 0)
         self.coarse_moisture_input = QLineEdit("0")
         moisture_grid.addWidget(self.coarse_moisture_input, 2, 1)
+        self.coarse_moisture_input.setToolTip(
+            "Total moisture content currently present in the coarse aggregate (%), measured on site."
+        )
 
         moisture_grid.addWidget(QLabel("Coarse Agg. Absorption (%)"), 3, 0)
         self.coarse_absorption_input = QLineEdit("0")
         moisture_grid.addWidget(self.coarse_absorption_input, 3, 1)
+        self.coarse_absorption_input.setToolTip(
+            "Water absorption capacity of the coarse aggregate (%)."
+        )
 
         form_layout.addLayout(moisture_grid)
 
@@ -143,10 +186,16 @@ class MixDesignApp(QWidget):
         batch_grid.addWidget(QLabel("Total Volume Needed (m³)"), 0, 0)
         self.volume_input = QLineEdit("1")
         batch_grid.addWidget(self.volume_input, 0, 1)
+        self.volume_input.setToolTip(
+            "Total volume of concrete (in m³) you need to produce for this pour/project."
+        )
 
         batch_grid.addWidget(QLabel("Cement Bag Weight (kg)"), 1, 0)
         self.bag_weight_input = QLineEdit("50")
         batch_grid.addWidget(self.bag_weight_input, 1, 1)
+        self.bag_weight_input.setToolTip(
+            "Standard weight of one cement bag (kg). Commonly 50kg."
+        )
 
         form_layout.addLayout(batch_grid)
 
@@ -161,18 +210,30 @@ class MixDesignApp(QWidget):
         cost_grid.addWidget(QLabel("Cement Rate (per bag)"), 0, 0)
         self.cement_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.cement_rate_input, 0, 1)
+        self.cement_rate_input.setToolTip(
+            "Cost of one bag of cement in your local currency."
+        )
 
         cost_grid.addWidget(QLabel("Fine Aggregate Rate (per kg)"), 1, 0)
         self.fine_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.fine_rate_input, 1, 1)
+        self.fine_rate_input.setToolTip(
+            "Cost per kg of fine aggregate (sand) in your local currency."
+        )
 
         cost_grid.addWidget(QLabel("Coarse Aggregate Rate (per kg)"), 2, 0)
         self.coarse_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.coarse_rate_input, 2, 1)
+        self.coarse_rate_input.setToolTip(
+            "Cost per kg of coarse aggregate (crushed stone/gravel) in your local currency."
+        )
 
         cost_grid.addWidget(QLabel("Water Rate (per liter, optional)"), 3, 0)
         self.water_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.water_rate_input, 3, 1)
+        self.water_rate_input.setToolTip(
+            "Cost per liter of water, if applicable. Often negligible, can be left at 0."
+        )
 
         form_layout.addLayout(cost_grid)
 
@@ -188,10 +249,18 @@ class MixDesignApp(QWidget):
         self.actual_slump_input = QLineEdit()
         self.actual_slump_input.setPlaceholderText("e.g. 80")
         trial_grid.addWidget(self.actual_slump_input, 0, 1)
+        self.actual_slump_input.setToolTip(
+            "The slump you actually measured after casting a trial batch on site.\n"
+            "Compared against the target slump to calculate a correction."
+        )
 
         trial_grid.addWidget(QLabel("Water Adjustment Rate (kg per 10mm)"), 1, 0)
         self.water_adj_rate_input = QLineEdit("2.5")
         trial_grid.addWidget(self.water_adj_rate_input, 1, 1)
+        self.water_adj_rate_input.setToolTip(
+            "How much water (kg/m³) to add or remove per 10mm difference between\n"
+            "actual and target slump. Typical value: 2-3 kg per 10mm."
+        )
 
         form_layout.addLayout(trial_grid)
 
