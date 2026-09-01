@@ -3,10 +3,10 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QTableWidget,
     QTableWidgetItem, QFrame, QHeaderView, QTabWidget, QListWidget,
-    QListWidgetItem, QMessageBox, QScrollArea, QFileDialog
+    QListWidgetItem, QMessageBox, QScrollArea, QFileDialog, QSplashScreen
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont, QColor
 
 from logic.mix_design import (
     calculate_mix as calculate_mix_aci,
@@ -16,9 +16,6 @@ from logic.is10262 import calculate_mix as calculate_mix_is
 from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects
 from report_generator import generate_pdf_report
 from charts_widget import ChartsWidget
-from PySide6.QtWidgets import QSplashScreen
-from PySide6.QtGui import QPixmap, QPainter, QFont, QColor
-from PySide6.QtCore import QTimer
 
 
 class MixDesignApp(QWidget):
@@ -60,7 +57,6 @@ class MixDesignApp(QWidget):
         subtitle.setObjectName("subtitle")
         form_layout.addWidget(subtitle)
 
-        # design method selector - drives which calculation engine runs
         method_label = QLabel("Design Method")
         method_label.setObjectName("sectionLabel")
         form_layout.addWidget(method_label)
@@ -342,8 +338,6 @@ class MixDesignApp(QWidget):
         self.on_method_changed(self.method_combo.currentText())
 
     def on_method_changed(self, method_text):
-        # dono fields hamesha visible rehte hain, bas placeholder/labels se guide karte hain
-        # kaunsa field actually use hoga ye calculation ke waqt method se decide hota hai
         is_aci = "ACI" in method_text
         self.fm_input.setEnabled(is_aci)
         self.zone_combo.setEnabled(not is_aci)
@@ -428,6 +422,7 @@ class MixDesignApp(QWidget):
         self.error_label.setText("")
         self.calc_btn.setEnabled(False)
         self.calc_btn.setText("⏳  Calculating...")
+        QApplication.processEvents()
 
         try:
             fck = float(self.fck_input.text())
@@ -451,12 +446,13 @@ class MixDesignApp(QWidget):
             water_rate = float(self.water_rate_input.text() or 0)
         except ValueError:
             self.error_label.setText("Please fill all fields correctly — numeric values only.")
+            self.calc_btn.setEnabled(True)
+            self.calc_btn.setText("🧮  Calculate Mix Design")
             return
 
         method = self.method_combo.currentText()
 
         if "ACI" in method:
-            # ACI formally only has 3 exposure categories - map extras down to severe
             aci_exposure = exposure if exposure in ("mild", "moderate", "severe") else "severe"
             result = calculate_mix_aci(
                 fck, slump, max_agg_size, aci_exposure, fm_sand,
@@ -479,6 +475,7 @@ class MixDesignApp(QWidget):
         self.last_cost_info = cost_info
 
         self.populate_results(result, batch_info, cost_info)
+
         self.calc_btn.setEnabled(True)
         self.calc_btn.setText("🧮  Calculate Mix Design")
 
@@ -521,7 +518,6 @@ class MixDesignApp(QWidget):
             ("Air Content", f'{result["air_percent"]}%'),
         ]
 
-        # IS 10262-only extra info, add karo agar present hai
         if "target_mean_strength" in result:
             common_rows.insert(0, ("Target Mean Strength", f'{result["target_mean_strength"]} MPa'))
         if "min_cement_required" in result:
@@ -622,7 +618,7 @@ class MixDesignApp(QWidget):
 
         self.pdf_btn.setEnabled(False)
         self.pdf_btn.setText("⏳  Generating...")
-        QApplication.processEvents()   # UI turant update ho, button ka naya text turant dikhe
+        QApplication.processEvents()
 
         try:
             import tempfile, os
@@ -708,8 +704,8 @@ class MixDesignApp(QWidget):
             delete_project(project_id)
             self.refresh_projects_list()
 
-        def apply_styles(self):
-            self.setStyleSheet("""
+    def apply_styles(self):
+        self.setStyleSheet("""
             QWidget {
                 background-color: #1a1f2b;
                 font-family: 'Segoe UI', sans-serif;
@@ -905,8 +901,8 @@ class MixDesignApp(QWidget):
             }
         """)
 
+
 def create_splash_pixmap():
-    # simple programmatic splash - koi image file ki zaroorat nahi
     pixmap = QPixmap(500, 300)
     pixmap.fill(QColor("#1a1f2b"))
 
@@ -941,7 +937,6 @@ if __name__ == "__main__":
 
     window = MixDesignApp()
 
-    # 1.5 second baad splash band karke main window dikhao
     def show_main_window():
         window.show()
         splash.finish(window)
