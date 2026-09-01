@@ -16,6 +16,9 @@ from logic.is10262 import calculate_mix as calculate_mix_is
 from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects
 from report_generator import generate_pdf_report
 from charts_widget import ChartsWidget
+from PySide6.QtWidgets import QSplashScreen
+from PySide6.QtGui import QPixmap, QPainter, QFont, QColor
+from PySide6.QtCore import QTimer
 
 
 class MixDesignApp(QWidget):
@@ -890,9 +893,47 @@ class MixDesignApp(QWidget):
             }
         """)
 
+def create_splash_pixmap():
+    # simple programmatic splash - koi image file ki zaroorat nahi
+    pixmap = QPixmap(500, 300)
+    pixmap.fill(QColor("#1a1f2b"))
+
+    painter = QPainter(pixmap)
+    painter.setPen(QColor("#4f8cff"))
+    title_font = QFont("Segoe UI", 22, QFont.Bold)
+    painter.setFont(title_font)
+    painter.drawText(pixmap.rect().adjusted(0, -30, 0, 0), Qt.AlignCenter, "Concrete Mix Design")
+
+    painter.setPen(QColor("#8b94a8"))
+    sub_font = QFont("Segoe UI", 11)
+    painter.setFont(sub_font)
+    painter.drawText(pixmap.rect().adjusted(0, 40, 0, 0), Qt.AlignCenter, "ACI 211.1  •  IS 10262")
+
+    painter.setPen(QColor("#5b6b8c"))
+    small_font = QFont("Segoe UI", 9)
+    painter.setFont(small_font)
+    painter.drawText(pixmap.rect().adjusted(0, 100, 0, -20), Qt.AlignBottom | Qt.AlignHCenter, "Loading...")
+
+    painter.end()
+    return pixmap
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    splash_pix = create_splash_pixmap()
+    splash = QSplashScreen(splash_pix)
+    splash.show()
+    app.processEvents()
+
     window = MixDesignApp()
-    window.show()
+
+    # 1.5 second baad splash band karke main window dikhao
+    def show_main_window():
+        window.show()
+        splash.finish(window)
+
+    QTimer.singleShot(1500, show_main_window)
+
     sys.exit(app.exec())
