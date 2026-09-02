@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont, QColor
+from PySide6.QtWidgets import QGroupBox
 
 from logic.mix_design import (
     calculate_mix as calculate_mix_aci,
