@@ -72,3 +72,10 @@ def search_projects(keyword):
     rows = cursor.fetchall()
     conn.close()
     return rows
+def get_project_count():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM projects")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
