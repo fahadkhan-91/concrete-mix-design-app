@@ -14,7 +14,7 @@ from logic.mix_design import (
     compute_batch_quantities, compute_cost_estimate, adjust_trial_mix
 )
 from logic.is10262 import calculate_mix as calculate_mix_is
-from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects
+from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects, get_project_count
 from report_generator import generate_pdf_report
 from charts_widget import ChartsWidget
 
@@ -36,6 +36,7 @@ class MixDesignApp(QWidget):
         self.build_ui()
         self.apply_styles()
         self.refresh_projects_list()
+        self.refresh_dashboard()
 
     def build_ui(self):
         main_layout = QHBoxLayout(self)
@@ -328,6 +329,8 @@ class MixDesignApp(QWidget):
         self.charts_widget = ChartsWidget()
         self.projects_tab = self.build_projects_tab()
 
+        self.dashboard_tab = self.build_dashboard_tab()
+        self.tabs.addTab(self.dashboard_tab, "🏠 Dashboard")
         self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
         self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
         self.tabs.addTab(self.site_batch_table, "Site Batching")
@@ -374,6 +377,65 @@ class MixDesignApp(QWidget):
 
         layout.addLayout(btn_row)
         return tab
+
+    def build_dashboard_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(16)
+
+        welcome = QLabel("Welcome back!")
+        welcome.setObjectName("title")
+        layout.addWidget(welcome)
+
+        self.dashboard_stats_label = QLabel("")
+        self.dashboard_stats_label.setObjectName("subtitle")
+        layout.addWidget(self.dashboard_stats_label)
+
+        recent_label = QLabel("RECENT PROJECTS")
+        recent_label.setObjectName("sectionLabel")
+        layout.addWidget(recent_label)
+
+        self.dashboard_recent_list = QListWidget()
+        self.dashboard_recent_list.itemDoubleClicked.connect(self.on_dashboard_load_project)
+        layout.addWidget(self.dashboard_recent_list)
+
+        hint = QLabel("Double-click a project to load it instantly.")
+        hint.setObjectName("subtitle")
+        layout.addWidget(hint)
+
+        layout.addStretch()
+        return tab
+
+    def refresh_dashboard(self):
+        count = get_project_count()
+        self.dashboard_stats_label.setText(f"You have {count} saved project(s).")
+
+        self.dashboard_recent_list.clear()
+        recent_rows = get_all_projects()[:5]   # already sorted by newest first
+        for project_id, name, created_at in recent_rows:
+            item = QListWidgetItem(f"{name}    ({created_at})")
+            item.setData(Qt.UserRole, project_id)
+            self.dashboard_recent_list.addItem(item)
+
+    def on_dashboard_load_project(self, item):
+        project_id = item.data(Qt.UserRole)
+        inputs, results = get_project(project_id)
+        if inputs is None:
+            QMessageBox.warning(self, "Error", "Failed to load the project.")
+            return
+
+        self.set_inputs(inputs)
+        self.last_result = results["mix"]
+        self.last_batch_info = results["batch"]
+        self.last_cost_info = results.get("cost", {
+            "cement_cost": 0, "fine_cost": 0, "coarse_cost": 0,
+            "water_cost": 0, "total_cost": 0, "cost_per_m3": 0
+        })
+        self.last_trial_result = None
+        self.populate_results(results["mix"], results["batch"], self.last_cost_info)
+        self.tabs.setCurrentWidget(self.field_table)
+
+        QMessageBox.information(self, "Loaded", "Project loaded successfully — view the results in the other tabs.")
 
     def make_result_table(self):
         table = QTableWidget()
@@ -606,6 +668,7 @@ class MixDesignApp(QWidget):
         save_project(name, inputs, combined_results)
         self.project_name_input.clear()
         self.refresh_projects_list()
+        self.refresh_dashboard()
         QMessageBox.information(self, "Saved", f"Project '{name}' has been saved successfully.")
 
     def on_export_pdf(self):
@@ -707,6 +770,7 @@ class MixDesignApp(QWidget):
             QMessageBox.Yes | QMessageBox.No
         )
         if confirm == QMessageBox.Yes:
+            self.refresh_dashboard()
             delete_project(project_id)
             self.refresh_projects_list()
 
