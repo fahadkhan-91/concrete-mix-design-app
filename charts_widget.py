@@ -1,7 +1,6 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QPushButton
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-import mplcursors
 
 COLOR_CEMENT = "#4f8cff"
 COLOR_WATER = "#2ecc71"
@@ -62,14 +61,11 @@ class ChartsWidget(QWidget):
         self.wc_canvas = FigureCanvasQTAgg(self.wc_figure)
         self.stack.addWidget(self.wc_canvas)
 
-        # zoom sirf bar/compare/wc charts pe - pie chart ko zoom karne se koi fayda nahi,
-        # ulta distort ho jata hai isliye usay scroll-zoom se exclude kar diya
+        # zoom sirf bar/compare/wc charts pe - pie chart ko zoom karna distort kar deta hai
         self.bar_canvas.mpl_connect("scroll_event", self._on_scroll_zoom)
         self.compare_canvas.mpl_connect("scroll_event", self._on_scroll_zoom)
         self.wc_canvas.mpl_connect("scroll_event", self._on_scroll_zoom)
 
-        self._active_cursors = []
-        # har chart ka axis aur uska original (default) view store karte hain, reset button ke liye
         self._axes = {}
         self._original_limits = {}
 
@@ -148,14 +144,6 @@ class ChartsWidget(QWidget):
         ax.set_ylim([ydata - new_height * (1 - rely), ydata + new_height * rely])
         ax.figure.canvas.draw_idle()
 
-    def _clear_cursors(self):
-        for cursor in self._active_cursors:
-            try:
-                cursor.remove()
-            except Exception:
-                pass
-        self._active_cursors = []
-
     def _style_axis(self, ax, facecolor):
         ax.set_facecolor(facecolor)
         ax.tick_params(colors=TEXT_COLOR, labelsize=9)
@@ -163,12 +151,6 @@ class ChartsWidget(QWidget):
             spine.set_color(GRID_COLOR)
         ax.grid(axis="y", color=GRID_COLOR, linewidth=0.5, alpha=0.5)
         ax.set_axisbelow(True)
-
-    def _style_tooltip(self, cursor):
-        cursor.connect("add", lambda sel: sel.annotation.get_bbox_patch().set(
-            fc="#1a2029", ec="#4f8cff", alpha=0.95
-        ))
-        cursor.connect("add", lambda sel: sel.annotation.set_color("white"))
 
     # ---------- Chart 1: Mix Composition Pie ----------
     def update_composition_chart(self, result):
@@ -185,24 +167,18 @@ class ChartsWidget(QWidget):
         ]
         colors = [COLOR_CEMENT, COLOR_WATER, COLOR_FINE, COLOR_COARSE]
 
-        wedges, texts, autotexts = ax.pie(
+        ax.pie(
             values, autopct="%1.1f%%", colors=colors, pctdistance=0.75,
             textprops={"color": "white", "fontsize": 11},
             wedgeprops={"edgecolor": BG_DARKER, "linewidth": 1.5}
         )
         ax.legend(
-            wedges, labels, loc="upper center", bbox_to_anchor=(0.5, -0.02),
-            ncol=4, frameon=False, labelcolor="white", fontsize=10
+            [f"{l} ({v:.1f} kg/m³)" for l, v in zip(labels, values)],
+            loc="upper center", bbox_to_anchor=(0.5, -0.02),
+            ncol=2, frameon=False, labelcolor="white", fontsize=9
         )
         ax.set_title("Mix Composition (by weight)", color="white", fontsize=14, pad=14)
-        self.pie_figure.subplots_adjust(top=0.90, bottom=0.12)
-
-        cursor = mplcursors.cursor(wedges, hover=True)
-        cursor.connect("add", lambda sel: sel.annotation.set_text(
-            f"{labels[sel.index]}: {values[sel.index]:.1f} kg/m³"
-        ))
-        self._style_tooltip(cursor)
-        self._active_cursors.append(cursor)
+        self.pie_figure.subplots_adjust(top=0.90, bottom=0.18)
 
         self._axes[0] = ax
         self._original_limits[0] = (ax.get_xlim(), ax.get_ylim())
@@ -237,13 +213,6 @@ class ChartsWidget(QWidget):
 
         self.bar_figure.subplots_adjust(top=0.90, bottom=0.1, left=0.1, right=0.95)
 
-        cursor = mplcursors.cursor(bars, hover=True)
-        cursor.connect("add", lambda sel: sel.annotation.set_text(
-            f"{labels[sel.index]}: {values[sel.index]:,.0f}"
-        ))
-        self._style_tooltip(cursor)
-        self._active_cursors.append(cursor)
-
         self._axes[1] = ax
         self._original_limits[1] = (ax.get_xlim(), ax.get_ylim())
 
@@ -273,27 +242,25 @@ class ChartsWidget(QWidget):
         bars2 = ax.bar([i + width/2 for i in x], field_values, width,
                         label="Field (Moisture Adjusted)", color=COLOR_CEMENT)
 
+        for bar in bars1:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, height, f'{height:.0f}',
+                    ha="center", va="bottom", color="white", fontsize=8)
+        for bar in bars2:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, height, f'{height:.0f}',
+                    ha="center", va="bottom", color="white", fontsize=8)
+
         ax.set_xticks(list(x))
         ax.set_xticklabels(categories)
         ax.set_title("Batch vs Field Quantities (kg/m³)", color="white", fontsize=14, pad=14)
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2,
                   frameon=False, labelcolor="white", fontsize=10)
 
+        max_val = max(batch_values + field_values) if (batch_values + field_values) else 1
+        ax.set_ylim(0, max_val * 1.15)
+
         self.compare_figure.subplots_adjust(top=0.90, bottom=0.16, left=0.1, right=0.95)
-
-        cursor1 = mplcursors.cursor(bars1, hover=True)
-        cursor1.connect("add", lambda sel: sel.annotation.set_text(
-            f"{categories[sel.index]} (Batch): {batch_values[sel.index]:.1f} kg/m³"
-        ))
-        self._style_tooltip(cursor1)
-        self._active_cursors.append(cursor1)
-
-        cursor2 = mplcursors.cursor(bars2, hover=True)
-        cursor2.connect("add", lambda sel: sel.annotation.set_text(
-            f"{categories[sel.index]} (Field): {field_values[sel.index]:.1f} kg/m³"
-        ))
-        self._style_tooltip(cursor2)
-        self._active_cursors.append(cursor2)
 
         self._axes[2] = ax
         self._original_limits[2] = (ax.get_xlim(), ax.get_ylim())
@@ -320,13 +287,6 @@ class ChartsWidget(QWidget):
                     va="center", ha="left", color="white", fontsize=11)
 
         self.wc_figure.subplots_adjust(top=0.88, bottom=0.1, left=0.2, right=0.9)
-
-        cursor = mplcursors.cursor(bars, hover=True)
-        cursor.connect("add", lambda sel: sel.annotation.set_text(
-            f"{labels[sel.index]}: {values[sel.index]:.3f}"
-        ))
-        self._style_tooltip(cursor)
-        self._active_cursors.append(cursor)
 
         self._axes[3] = ax
         self._original_limits[3] = (ax.get_xlim(), ax.get_ylim())
