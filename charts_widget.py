@@ -3,7 +3,6 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 import mplcursors
 
-# consistent color palette - har material ka rang hamesha same rahega har chart mein
 COLOR_CEMENT = "#4f8cff"
 COLOR_WATER = "#2ecc71"
 COLOR_FINE = "#f39c12"
@@ -22,7 +21,6 @@ class ChartsWidget(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(10)
 
-        # navigation row - har chart ke liye ek button, jaisa tab bar
         nav_row = QHBoxLayout()
         nav_row.setSpacing(8)
 
@@ -37,13 +35,17 @@ class ChartsWidget(QWidget):
             self.nav_buttons.append(btn)
 
         nav_row.addStretch()
+
+        self.reset_btn = QPushButton("↺  Reset View")
+        self.reset_btn.setObjectName("resetViewBtn")
+        self.reset_btn.clicked.connect(self.reset_current_view)
+        nav_row.addWidget(self.reset_btn)
+
         main_layout.addLayout(nav_row)
 
-        # stacked widget - ek waqt mein sirf ek chart poori jagah leta hai
         self.stack = QStackedWidget()
         main_layout.addWidget(self.stack)
 
-        # bade figures - poori jagah milegi ab
         self.pie_figure = Figure(figsize=(8, 6), facecolor=BG_DARK)
         self.pie_canvas = FigureCanvasQTAgg(self.pie_figure)
         self.stack.addWidget(self.pie_canvas)
@@ -60,18 +62,34 @@ class ChartsWidget(QWidget):
         self.wc_canvas = FigureCanvasQTAgg(self.wc_figure)
         self.stack.addWidget(self.wc_canvas)
 
-        for canvas in (self.pie_canvas, self.bar_canvas, self.compare_canvas, self.wc_canvas):
-            canvas.mpl_connect("scroll_event", self._on_scroll_zoom)
+        # zoom sirf bar/compare/wc charts pe - pie chart ko zoom karne se koi fayda nahi,
+        # ulta distort ho jata hai isliye usay scroll-zoom se exclude kar diya
+        self.bar_canvas.mpl_connect("scroll_event", self._on_scroll_zoom)
+        self.compare_canvas.mpl_connect("scroll_event", self._on_scroll_zoom)
+        self.wc_canvas.mpl_connect("scroll_event", self._on_scroll_zoom)
 
         self._active_cursors = []
+        # har chart ka axis aur uska original (default) view store karte hain, reset button ke liye
+        self._axes = {}
+        self._original_limits = {}
 
         self._apply_nav_styles()
-        self.show_chart(0)   # default first chart dikhao
+        self.show_chart(0)
 
     def show_chart(self, index):
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == index)
+
+    def reset_current_view(self):
+        idx = self.stack.currentIndex()
+        ax = self._axes.get(idx)
+        limits = self._original_limits.get(idx)
+        if ax is None or limits is None:
+            return
+        ax.set_xlim(limits[0])
+        ax.set_ylim(limits[1])
+        ax.figure.canvas.draw_idle()
 
     def _apply_nav_styles(self):
         self.setStyleSheet("""
@@ -91,6 +109,19 @@ class ChartsWidget(QWidget):
                 background-color: #4f8cff;
                 color: white;
                 border: 1px solid #4f8cff;
+            }
+            QPushButton#resetViewBtn {
+                background-color: #2c3547;
+                color: #c4cad6;
+                border: 1px solid #38425a;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton#resetViewBtn:hover {
+                background-color: #38425a;
+                color: white;
             }
         """)
 
@@ -173,6 +204,9 @@ class ChartsWidget(QWidget):
         self._style_tooltip(cursor)
         self._active_cursors.append(cursor)
 
+        self._axes[0] = ax
+        self._original_limits[0] = (ax.get_xlim(), ax.get_ylim())
+
         self.pie_canvas.draw()
 
     # ---------- Chart 2: Cost Breakdown Bar ----------
@@ -209,6 +243,9 @@ class ChartsWidget(QWidget):
         ))
         self._style_tooltip(cursor)
         self._active_cursors.append(cursor)
+
+        self._axes[1] = ax
+        self._original_limits[1] = (ax.get_xlim(), ax.get_ylim())
 
         self.bar_canvas.draw()
 
@@ -258,6 +295,9 @@ class ChartsWidget(QWidget):
         self._style_tooltip(cursor2)
         self._active_cursors.append(cursor2)
 
+        self._axes[2] = ax
+        self._original_limits[2] = (ax.get_xlim(), ax.get_ylim())
+
         self.compare_canvas.draw()
 
     # ---------- Chart 4: W/C Ratio Comparison ----------
@@ -287,6 +327,9 @@ class ChartsWidget(QWidget):
         ))
         self._style_tooltip(cursor)
         self._active_cursors.append(cursor)
+
+        self._axes[3] = ax
+        self._original_limits[3] = (ax.get_xlim(), ax.get_ylim())
 
         self.wc_canvas.draw()
 
