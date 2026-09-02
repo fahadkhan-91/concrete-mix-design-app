@@ -53,6 +53,10 @@ class MixDesignApp(QWidget):
         title = QLabel("Mix Design Inputs")
         title.setObjectName("title")
         form_layout.addWidget(title)
+        self.theme_btn = QPushButton("☀️  Light Mode")
+        self.theme_btn.setObjectName("themeBtn")
+        self.theme_btn.clicked.connect(self.toggle_theme)
+        form_layout.addWidget(self.theme_btn)
 
         subtitle = QLabel("Choose a design method below")
         subtitle.setObjectName("subtitle")
