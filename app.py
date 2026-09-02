@@ -28,6 +28,7 @@ class MixDesignApp(QWidget):
         self.last_batch_info = None
         self.last_cost_info = None
         self.last_trial_result = None
+        self.current_theme = "dark"
 
         init_db()
 
@@ -704,84 +705,110 @@ class MixDesignApp(QWidget):
             delete_project(project_id)
             self.refresh_projects_list()
 
-    def apply_styles(self):
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #1a1f2b;
+       def apply_styles(self):
+        self.setStyleSheet(self.get_theme_stylesheet(self.current_theme))
+
+    def get_theme_stylesheet(self, theme):
+        if theme == "light":
+            bg_main = "#f4f6fa"
+            bg_card = "#ffffff"
+            border_color = "#d8dde6"
+            text_main = "#1e2530"
+            text_muted = "#6b7280"
+            input_bg = "#ffffff"
+            input_text = "#16191f"
+            table_bg = "#ffffff"
+            table_text = "#1e2530"
+            tab_bg = "#e9ecf3"
+        else:
+            bg_main = "#1a1f2b"
+            bg_card = "#242b3a"
+            border_color = "#313b52"
+            text_main = "#e6e9ef"
+            text_muted = "#8b94a8"
+            input_bg = "#ffffff"
+            input_text = "#16191f"
+            table_bg = "#1a1f2b"
+            table_text = "#ffffff"
+            tab_bg = "#1a1f2b"
+
+        return f"""
+            QWidget {{
+                background-color: {bg_main};
                 font-family: 'Segoe UI', sans-serif;
                 font-size: 13px;
-                color: #e6e9ef;
-            }
-            #formScroll {
+                color: {text_main};
+            }}
+            #formScroll {{
                 border: none;
                 background: transparent;
-            }
-            #card {
-                background-color: #242b3a;
-                border: 1px solid #313b52;
+            }}
+            #card {{
+                background-color: {bg_card};
+                border: 1px solid {border_color};
                 border-radius: 14px;
                 padding: 24px;
-            }
-            #title {
+            }}
+            #title {{
                 font-size: 21px;
                 font-weight: 600;
-                color: #ffffff;
+                color: {text_main};
                 letter-spacing: 0.2px;
-            }
-            #subtitle {
+            }}
+            #subtitle {{
                 font-size: 12px;
-                color: #8b94a8;
+                color: {text_muted};
                 margin-bottom: 10px;
-            }
-            #sectionLabel {
+            }}
+            #sectionLabel {{
                 font-size: 12px;
                 font-weight: 600;
-                color: #6ea3ff;
+                color: #4f8cff;
                 margin-top: 14px;
                 letter-spacing: 0.3px;
                 text-transform: uppercase;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 font-size: 13px;
-                color: #c4cad6;
+                color: {text_main};
                 background: transparent;
-            }
-            QLineEdit {
-                background-color: #ffffff;
-                border: 1.5px solid #3a4560;
+            }}
+            QLineEdit {{
+                background-color: {input_bg};
+                border: 1.5px solid {border_color};
                 border-radius: 8px;
                 padding: 9px 10px;
-                color: #16191f;
+                color: {input_text};
                 font-size: 13px;
                 min-height: 24px;
-            }
-            QLineEdit:disabled {
+            }}
+            QLineEdit:disabled {{
                 background-color: #cfd3da;
                 color: #6b6b6b;
-            }
-            QLineEdit:focus {
+            }}
+            QLineEdit:focus {{
                 border: 1.5px solid #4f8cff;
-            }
-            QComboBox {
-                background-color: #ffffff;
-                border: 1.5px solid #3a4560;
+            }}
+            QComboBox {{
+                background-color: {input_bg};
+                border: 1.5px solid {border_color};
                 border-radius: 8px;
                 padding: 9px 10px;
-                color: #16191f;
+                color: {input_text};
                 font-size: 13px;
                 min-height: 24px;
-            }
-            QComboBox:disabled {
+            }}
+            QComboBox:disabled {{
                 background-color: #cfd3da;
                 color: #6b6b6b;
-            }
-            QComboBox QAbstractItemView {
+            }}
+            QComboBox QAbstractItemView {{
                 background-color: #ffffff;
                 color: #000000;
                 selection-background-color: #4f8cff;
                 selection-color: #ffffff;
-            }
-            #calcBtn {
+            }}
+            #calcBtn {{
                 background-color: #4f8cff;
                 color: white;
                 font-weight: 600;
@@ -790,116 +817,132 @@ class MixDesignApp(QWidget):
                 border-radius: 10px;
                 border: none;
                 margin-top: 12px;
-            }
-            #calcBtn:hover {
+            }}
+            #calcBtn:hover {{
                 background-color: #3d76e0;
-            }
-            #calcBtn:pressed {
+            }}
+            #calcBtn:pressed {{
                 background-color: #2e5fc4;
-            }
-            #trialBtn {
+            }}
+            #trialBtn {{
                 background-color: #9b59b6;
                 color: white;
                 font-weight: 600;
                 padding: 11px;
                 border-radius: 8px;
                 border: none;
-            }
-            #trialBtn:hover {
+            }}
+            #trialBtn:hover {{
                 background-color: #8e44ad;
-            }
-            #saveBtn {
+            }}
+            #saveBtn {{
                 background-color: #2ecc71;
                 color: white;
                 font-weight: 600;
                 padding: 10px 16px;
                 border-radius: 8px;
                 border: none;
-            }
-            #saveBtn:hover {
+            }}
+            #saveBtn:hover {{
                 background-color: #27ae60;
-            }
-            #pdfBtn {
+            }}
+            #pdfBtn {{
                 background-color: #f39c12;
                 color: white;
                 font-weight: 600;
                 padding: 10px 16px;
                 border-radius: 8px;
                 border: none;
-            }
-            #pdfBtn:hover {
+            }}
+            #pdfBtn:hover {{
                 background-color: #d68910;
-            }
-            #deleteBtn {
+            }}
+            #deleteBtn {{
                 background-color: #e74c3c;
                 color: white;
                 font-weight: 600;
                 padding: 10px 16px;
                 border-radius: 8px;
                 border: none;
-            }
-            #deleteBtn:hover {
+            }}
+            #deleteBtn:hover {{
                 background-color: #c0392b;
-            }
-            #errorLabel {
+            }}
+            #themeBtn {{
+                background-color: {bg_card};
+                color: {text_main};
+                border: 1.5px solid {border_color};
+                font-weight: 600;
+                padding: 8px 14px;
+                border-radius: 8px;
+            }}
+            #themeBtn:hover {{
+                background-color: {border_color};
+            }}
+            #errorLabel {{
                 color: #ff6b6b;
                 font-size: 12px;
                 margin-top: 8px;
-            }
-            QTableWidget, QListWidget {
-                background-color: #1a1f2b;
-                border: 1px solid #313b52;
+            }}
+            QTableWidget, QListWidget {{
+                background-color: {table_bg};
+                border: 1px solid {border_color};
                 border-radius: 10px;
-                gridline-color: #2c3547;
-                color: #ffffff;
+                gridline-color: {border_color};
+                color: {table_text};
                 selection-background-color: #2e3a52;
-            }
-            QTableWidget::item, QListWidget::item {
+            }}
+            QTableWidget::item, QListWidget::item {{
                 padding: 6px 4px;
-            }
-            QHeaderView::section {
+            }}
+            QHeaderView::section {{
                 background-color: #2c3547;
                 color: #ffffff;
                 padding: 8px;
                 border: none;
                 font-weight: 600;
                 font-size: 12px;
-            }
-            QTabWidget::pane {
+            }}
+            QTabWidget::pane {{
                 border: none;
                 margin-top: 4px;
-            }
-            QTabBar::tab {
-                background-color: #1a1f2b;
-                color: #8b94a8;
+            }}
+            QTabBar::tab {{
+                background-color: {tab_bg};
+                color: {text_muted};
                 padding: 9px 18px;
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
                 font-size: 12px;
                 margin-right: 2px;
-            }
-            QTabBar::tab:selected {
+            }}
+            QTabBar::tab:selected {{
                 background-color: #4f8cff;
                 color: white;
                 font-weight: 600;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #2c3547;
-            }
-            QScrollBar:vertical {
-                background: #1a1f2b;
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: {border_color};
+            }}
+            QScrollBar:vertical {{
+                background: {bg_main};
                 width: 10px;
                 border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
-                background: #3a4560;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {border_color};
                 border-radius: 5px;
                 min-height: 30px;
-            }
-            QScrollBar::handle:vertical:hover {
+            }}
+            QScrollBar::handle:vertical:hover {{
                 background: #4f8cff;
-            }
-        """)
+            }}
+        """
+
+    def toggle_theme(self):
+        self.current_theme = "light" if self.current_theme == "dark" else "dark"
+        self.apply_styles()
+        self.theme_btn.setText("☀️  Light Mode" if self.current_theme == "dark" else "🌙  Dark Mode")
 
 
 def create_splash_pixmap():
