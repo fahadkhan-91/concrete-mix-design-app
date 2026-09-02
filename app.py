@@ -709,7 +709,7 @@ class MixDesignApp(QWidget):
             delete_project(project_id)
             self.refresh_projects_list()
 
-       def apply_styles(self):
+    def apply_styles(self):
         self.setStyleSheet(self.get_theme_stylesheet(self.current_theme))
 
     def get_theme_stylesheet(self, theme):
