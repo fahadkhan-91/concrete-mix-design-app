@@ -2,4 +2,3 @@ PySide6==6.8.2
 reportlab==4.2.2
 matplotlib==3.9.2
 pyinstaller==6.11.0
-mplcursors==0.5.2
