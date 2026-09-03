@@ -20,6 +20,7 @@ from database import (
     search_projects, get_project_count
 )
 from report_generator import generate_pdf_report
+from excel_exporter import export_excel_report
 from charts_widget import ChartsWidget
 
 
@@ -308,6 +309,11 @@ class MixDesignApp(QWidget):
         self.pdf_btn.setObjectName("pdfBtn")
         self.pdf_btn.clicked.connect(self.on_export_pdf)
         action_row.addWidget(self.pdf_btn)
+
+        self.excel_btn = QPushButton("📊  Export Excel")
+        self.excel_btn.setObjectName("excelBtn")
+        self.excel_btn.clicked.connect(self.on_export_excel)
+        action_row.addWidget(self.excel_btn)
 
         form_layout.addLayout(action_row)
 
@@ -750,6 +756,42 @@ class MixDesignApp(QWidget):
             self.pdf_btn.setEnabled(True)
             self.pdf_btn.setText("📄  Export PDF Report")
 
+    def on_export_excel(self):
+        if self.last_result is None:
+            QMessageBox.warning(self, "Calculate First", "Please calculate the mix design before exporting.")
+            return
+
+        default_name = self.project_name_input.text().strip() or "mix_design_report"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Excel Report", f"{default_name}.xlsx", "Excel Files (*.xlsx)"
+        )
+        if not file_path:
+            return
+
+        inputs = self.get_current_inputs()
+
+        self.excel_btn.setEnabled(False)
+        self.excel_btn.setText("⏳  Generating...")
+        QApplication.processEvents()
+
+        try:
+            export_excel_report(
+                file_path,
+                self.project_name_input.text().strip(),
+                inputs,
+                self.last_result,
+                self.last_batch_info,
+                self.last_cost_info,
+                trial_result=self.last_trial_result,
+                method_name=inputs["method"]
+            )
+            QMessageBox.information(self, "Exported", f"Excel report saved to:\n{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", f"Could not generate Excel file:\n{str(e)}")
+        finally:
+            self.excel_btn.setEnabled(True)
+            self.excel_btn.setText("📊  Export Excel")
+
     def refresh_projects_list(self, keyword=None):
         self.projects_list.clear()
         rows = search_projects(keyword) if keyword else get_all_projects()
@@ -952,6 +994,17 @@ class MixDesignApp(QWidget):
             }}
             #pdfBtn:hover {{
                 background-color: #d68910;
+            }}
+            #excelBtn {{
+                background-color: #16a34a;
+                color: white;
+                font-weight: 600;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
+            }}
+            #excelBtn:hover {{
+                background-color: #128a3e;
             }}
             #deleteBtn {{
                 background-color: #e74c3c;
