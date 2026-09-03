@@ -3,18 +3,22 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QTableWidget,
     QTableWidgetItem, QFrame, QHeaderView, QTabWidget, QListWidget,
-    QListWidgetItem, QMessageBox, QScrollArea, QFileDialog, QSplashScreen
+    QListWidgetItem, QMessageBox, QScrollArea, QFileDialog, QSplashScreen,
+    QStackedWidget
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont, QColor
-from PySide6.QtWidgets import QGroupBox
 
 from logic.mix_design import (
     calculate_mix as calculate_mix_aci,
     compute_batch_quantities, compute_cost_estimate, adjust_trial_mix
 )
 from logic.is10262 import calculate_mix as calculate_mix_is
-from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects, get_project_count
+from logic.bs_doe import calculate_mix as calculate_mix_bs
+from database import (
+    init_db, save_project, get_all_projects, get_project, delete_project,
+    search_projects, get_project_count
+)
 from report_generator import generate_pdf_report
 from charts_widget import ChartsWidget
 
@@ -22,7 +26,7 @@ from charts_widget import ChartsWidget
 class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Concrete Mix Design — ACI 211.1 / IS 10262")
+        self.setWindowTitle("Concrete Mix Design — ACI 211.1 / IS 10262 / BS-DOE")
         self.setWindowIcon(QIcon("app_icon.ico"))
         self.resize(1200, 880)
         self.last_result = None
@@ -52,13 +56,14 @@ class MixDesignApp(QWidget):
         form_layout = QVBoxLayout(form_card)
         form_layout.setSpacing(14)
 
-        title = QLabel("Mix Design Inputs")
-        title.setObjectName("title")
-        form_layout.addWidget(title)
         self.theme_btn = QPushButton("☀️  Light Mode")
         self.theme_btn.setObjectName("themeBtn")
         self.theme_btn.clicked.connect(self.toggle_theme)
         form_layout.addWidget(self.theme_btn)
+
+        title = QLabel("Mix Design Inputs")
+        title.setObjectName("title")
+        form_layout.addWidget(title)
 
         subtitle = QLabel("Choose a design method below")
         subtitle.setObjectName("subtitle")
@@ -69,7 +74,7 @@ class MixDesignApp(QWidget):
         form_layout.addWidget(method_label)
 
         self.method_combo = QComboBox()
-        self.method_combo.addItems(["ACI 211.1", "IS 10262"])
+        self.method_combo.addItems(["ACI 211.1", "IS 10262", "BS/DOE"])
         self.method_combo.setToolTip(
             "Choose which standard's tables and procedure to use for the mix design calculation."
         )
@@ -129,14 +134,23 @@ class MixDesignApp(QWidget):
             "Obtained from a sieve analysis test."
         )
 
-        grid.addWidget(QLabel("Sand Zone (IS 10262)"), 5, 0)
+        grid.addWidget(QLabel("Sand Zone (IS 10262 / BS-DOE)"), 5, 0)
         self.zone_combo = QComboBox()
         self.zone_combo.addItems(["I", "II", "III", "IV"])
         self.zone_combo.setCurrentText("II")
         grid.addWidget(self.zone_combo, 5, 1)
         self.zone_combo.setToolTip(
             "Grading zone of fine aggregate as per IS 383 (Zone I = coarsest, Zone IV = finest).\n"
-            "Used only for IS 10262. Determined from a sieve analysis test."
+            "Used for IS 10262 and BS/DOE. Determined from a sieve analysis test."
+        )
+
+        grid.addWidget(QLabel("Aggregate Type (BS/DOE)"), 6, 0)
+        self.aggregate_type_combo = QComboBox()
+        self.aggregate_type_combo.addItems(["uncrushed", "crushed"])
+        grid.addWidget(self.aggregate_type_combo, 6, 1)
+        self.aggregate_type_combo.setToolTip(
+            "Shape of coarse aggregate — crushed (angular, e.g. crushed stone) needs more water\n"
+            "than uncrushed (rounded, e.g. natural gravel). Used only for BS/DOE."
         )
 
         form_layout.addLayout(grid)
@@ -321,6 +335,7 @@ class MixDesignApp(QWidget):
 
         self.tabs = QTabWidget()
 
+        self.dashboard_tab = self.build_dashboard_tab()
         self.batch_design_table = self.make_result_table()
         self.field_table = self.make_result_table()
         self.site_batch_table = self.make_result_table()
@@ -329,7 +344,6 @@ class MixDesignApp(QWidget):
         self.charts_widget = ChartsWidget()
         self.projects_tab = self.build_projects_tab()
 
-        self.dashboard_tab = self.build_dashboard_tab()
         self.tabs.addTab(self.dashboard_tab, "🏠 Dashboard")
         self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
         self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
@@ -348,35 +362,12 @@ class MixDesignApp(QWidget):
 
     def on_method_changed(self, method_text):
         is_aci = "ACI" in method_text
+        is_bs = "BS" in method_text
+        is_is = ("IS" in method_text) and not is_bs
+
         self.fm_input.setEnabled(is_aci)
-        self.zone_combo.setEnabled(not is_aci)
-
-    def build_projects_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        search_row = QHBoxLayout()
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search projects...")
-        self.search_input.textChanged.connect(self.on_search_changed)
-        search_row.addWidget(self.search_input)
-        layout.addLayout(search_row)
-
-        self.projects_list = QListWidget()
-        layout.addWidget(self.projects_list)
-
-        btn_row = QHBoxLayout()
-        self.load_btn = QPushButton("Load Selected")
-        self.load_btn.clicked.connect(self.on_load_project)
-        btn_row.addWidget(self.load_btn)
-
-        self.delete_btn = QPushButton("Delete Selected")
-        self.delete_btn.setObjectName("deleteBtn")
-        self.delete_btn.clicked.connect(self.on_delete_project)
-        btn_row.addWidget(self.delete_btn)
-
-        layout.addLayout(btn_row)
-        return tab
+        self.zone_combo.setEnabled(is_is or is_bs)
+        self.aggregate_type_combo.setEnabled(is_bs)
 
     def build_dashboard_tab(self):
         tab = QWidget()
@@ -411,7 +402,7 @@ class MixDesignApp(QWidget):
         self.dashboard_stats_label.setText(f"You have {count} saved project(s).")
 
         self.dashboard_recent_list.clear()
-        recent_rows = get_all_projects()[:5]   # already sorted by newest first
+        recent_rows = get_all_projects()[:5]
         for project_id, name, created_at in recent_rows:
             item = QListWidgetItem(f"{name}    ({created_at})")
             item.setData(Qt.UserRole, project_id)
@@ -437,6 +428,33 @@ class MixDesignApp(QWidget):
 
         QMessageBox.information(self, "Loaded", "Project loaded successfully — view the results in the other tabs.")
 
+    def build_projects_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        search_row = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search projects...")
+        self.search_input.textChanged.connect(self.on_search_changed)
+        search_row.addWidget(self.search_input)
+        layout.addLayout(search_row)
+
+        self.projects_list = QListWidget()
+        layout.addWidget(self.projects_list)
+
+        btn_row = QHBoxLayout()
+        self.load_btn = QPushButton("Load Selected")
+        self.load_btn.clicked.connect(self.on_load_project)
+        btn_row.addWidget(self.load_btn)
+
+        self.delete_btn = QPushButton("Delete Selected")
+        self.delete_btn.setObjectName("deleteBtn")
+        self.delete_btn.clicked.connect(self.on_delete_project)
+        btn_row.addWidget(self.delete_btn)
+
+        layout.addLayout(btn_row)
+        return tab
+
     def make_result_table(self):
         table = QTableWidget()
         table.setColumnCount(2)
@@ -455,6 +473,7 @@ class MixDesignApp(QWidget):
             "exposure": self.exposure_combo.currentText(),
             "fm_sand": self.fm_input.text(),
             "zone": self.zone_combo.currentText(),
+            "aggregate_type": self.aggregate_type_combo.currentText(),
             "fine_moisture": self.fine_moisture_input.text(),
             "fine_absorption": self.fine_absorption_input.text(),
             "coarse_moisture": self.coarse_moisture_input.text(),
@@ -475,6 +494,7 @@ class MixDesignApp(QWidget):
         self.exposure_combo.setCurrentText(str(inputs["exposure"]))
         self.fm_input.setText(str(inputs["fm_sand"]))
         self.zone_combo.setCurrentText(str(inputs.get("zone", "II")))
+        self.aggregate_type_combo.setCurrentText(str(inputs.get("aggregate_type", "uncrushed")))
         self.fine_moisture_input.setText(str(inputs["fine_moisture"]))
         self.fine_absorption_input.setText(str(inputs["fine_absorption"]))
         self.coarse_moisture_input.setText(str(inputs["coarse_moisture"]))
@@ -499,6 +519,7 @@ class MixDesignApp(QWidget):
             exposure = self.exposure_combo.currentText()
             fm_sand = float(self.fm_input.text() or 0)
             zone = self.zone_combo.currentText()
+            aggregate_type = self.aggregate_type_combo.currentText()
 
             fine_moisture = float(self.fine_moisture_input.text() or 0)
             fine_absorption = float(self.fine_absorption_input.text() or 0)
@@ -524,6 +545,12 @@ class MixDesignApp(QWidget):
             aci_exposure = exposure if exposure in ("mild", "moderate", "severe") else "severe"
             result = calculate_mix_aci(
                 fck, slump, max_agg_size, aci_exposure, fm_sand,
+                fine_moisture, fine_absorption,
+                coarse_moisture, coarse_absorption
+            )
+        elif "BS" in method:
+            result = calculate_mix_bs(
+                fck, slump, max_agg_size, exposure, zone, aggregate_type,
                 fine_moisture, fine_absorption,
                 coarse_moisture, coarse_absorption
             )
@@ -770,9 +797,9 @@ class MixDesignApp(QWidget):
             QMessageBox.Yes | QMessageBox.No
         )
         if confirm == QMessageBox.Yes:
-            self.refresh_dashboard()
             delete_project(project_id)
             self.refresh_projects_list()
+            self.refresh_dashboard()
 
     def apply_styles(self):
         self.setStyleSheet(self.get_theme_stylesheet(self.current_theme))
@@ -1027,7 +1054,7 @@ def create_splash_pixmap():
     painter.setPen(QColor("#8b94a8"))
     sub_font = QFont("Segoe UI", 11)
     painter.setFont(sub_font)
-    painter.drawText(pixmap.rect().adjusted(0, 40, 0, 0), Qt.AlignCenter, "ACI 211.1  •  IS 10262")
+    painter.drawText(pixmap.rect().adjusted(0, 40, 0, 0), Qt.AlignCenter, "ACI 211.1  •  IS 10262  •  BS/DOE")
 
     painter.setPen(QColor("#5b6b8c"))
     small_font = QFont("Segoe UI", 9)
