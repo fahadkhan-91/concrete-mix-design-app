@@ -1,6 +1,6 @@
 # Concrete Mix Design
 
-A desktop application for civil engineers to design concrete mixes using **ACI 211.1** or **IS 10262:2019** standard methods. Built with PySide6 (Qt), it takes basic design parameters and produces complete, ready-to-use mix design quantities — corrected for real site conditions, along with cost estimates and professional PDF reports.
+A desktop application for civil engineers to design concrete mixes using **ACI 211.1**, **IS 10262:2019**, or **BS/DOE** standard methods. Built with PySide6 (Qt), it takes basic design parameters and produces complete, ready-to-use mix design quantities — corrected for real site conditions, along with cost estimates and professional PDF/Excel reports.
 
 ![Main Window](screenshots/main-window.png)
 
@@ -17,53 +17,63 @@ A desktop application for civil engineers to design concrete mixes using **ACI 2
 - [Project Structure](#project-structure)
 - [Tech Stack](#tech-stack)
 - [Method Reference](#method-reference)
-- [Roadmap](#roadmap)
 - [License](#license)
 
 ## Overview
 
-Designing a concrete mix by hand means flipping through code tables, interpolating values, and manually correcting for moisture, exposure conditions, and site batching — a process that's easy to get wrong and tedious to repeat for every trial. This application automates that entire workflow: enter the design parameters once, and get lab (dry) quantities, site (moisture-corrected) quantities, batching instructions, cost estimates, and a shareable PDF report — all validated against standard mix design tables.
+Designing a concrete mix by hand means flipping through code tables, interpolating values, and manually correcting for moisture, exposure conditions, and site batching — a process that's easy to get wrong and tedious to repeat for every trial. This application automates that entire workflow: enter the design parameters once, and get lab (dry) quantities, site (moisture-corrected) quantities, batching instructions, cost estimates, and shareable reports — all validated against standard mix design tables from three major international standards.
 
 It's built for civil engineering students, site engineers, and lab technicians who need quick, repeatable, and accurate mix designs without relying on spreadsheets or manual lookups.
 
 ## Features
 
-### Two Design Standards
-Choose between **ACI 211.1** (US) and **IS 10262:2019** (Indian) mix design methods from a single dropdown. Each method uses its own tables for water content, water-cement ratio, and aggregate proportioning — ACI uses fineness modulus for sand classification, while IS uses sand zoning (Zone I–IV) as per IS 383.
+### Design & Calculation
 
-### Durability-Aware Design
-Exposure conditions (mild, moderate, severe, very severe, extreme) automatically apply the correct durability limits — maximum permissible water-cement ratio, minimum air content, and (for IS 10262) minimum cement content — rather than leaving these as separate manual checks.
+- **Three Design Standards** — choose between ACI 211.1 (US), IS 10262:2019 (Indian), and BS/DOE (British) from a single dropdown
+  - ACI uses fineness modulus for sand classification
+  - IS 10262 uses sand zoning (Zone I–IV, per IS 383) and enforces minimum cement content
+  - BS/DOE uses a density-based (mass-basis) approach with a strength-to-water/cement ratio curve, accounting for aggregate shape (crushed vs uncrushed)
+- **Durability-Aware Design** — exposure conditions (mild, moderate, severe, very severe, extreme) automatically apply the correct maximum w/c ratio, minimum air content, and minimum cement content for the selected standard
+- **Aggregate Moisture Correction** — converts lab (dry) batch quantities into real site (field) quantities based on measured moisture and absorption of both fine and coarse aggregate
+- **Trial Mix Adjustment** — recalculates water and cement content based on the actual slump measured from a site trial batch, correcting for the difference from the target
 
-### Real Site Correction
-Lab-calculated (dry/batch) quantities rarely match what you actually need on site, because aggregates carry moisture. Enter the measured moisture and absorption of your fine and coarse aggregate, and the app computes the corrected field quantities and adjusted water content automatically.
+### Site & Cost Tools
 
-### Site Batching
-Converts the per-m³ mix design into practical batching numbers — cement bags required per m³, and total material quantities for whatever volume of concrete you're actually pouring.
+- **Site Batching** — converts the per-m³ design into cement bags per m³ and total material quantities for any project volume
+- **Cost Estimation** — computes total project cost and cost-per-m³ from user-supplied material rates
 
-### Cost Estimation
-Enter your local material rates (per bag of cement, per kg of aggregate, per liter of water) and get an instant total project cost and cost-per-m³ breakdown.
+### Data & Reporting
 
-### Trial Mix Adjustment
-After casting a trial batch on site, if the measured slump doesn't match the target, this feature recalculates the water and cement content needed to correct it — based on the actual measured slump rather than the theoretical design value.
+- **Save, Search, and Reload Projects** — every mix design can be saved locally (SQLite-backed), searched by name, reloaded, or deleted
+- **Dashboard** — a landing tab showing total saved project count and the 5 most recent designs, ready to reload with a double-click
+- **PDF Reports** — structured input summary, complete result tables (batch, field, site batching, cost), trial mix section, and all charts embedded
+- **Excel Reports** — the same structured data exported as a multi-sheet workbook, ready for further analysis in a spreadsheet
 
-### Charts & Visualization
-Four charts give an at-a-glance view of the mix: composition by weight (pie), cost breakdown (bar), batch-vs-field quantity comparison, and a water-cement ratio comparison across strength-based, exposure-limited, and final values.
+### Visualization
 
-### Save, Search, and Reload Projects
-Every mix design can be saved locally (SQLite-backed) under a project name, searched later, reloaded to view or edit again, or deleted — useful for keeping a record of designs across multiple sites or trial batches.
+- **Interactive Charts** — mix composition (pie), cost breakdown (bar), batch-vs-field comparison, and w/c ratio comparison, shown one at a time in a large view
+- **Chart Navigation & Zoom** — switch between charts with navigation buttons, scroll to zoom in for detail, and reset to the default view with one click
 
-### Structured PDF Reports
-Generates a complete, multi-page PDF report: a structured input summary, full result tables (batch, field, site batching, cost), the trial mix adjustment (if computed), and all four charts — ready to print, email, or file for records.
+### Interface
+
+- **Light & Dark Themes** — switch between a dark and light interface with a single toggle button
+- **Contextual Help** — every input field includes a hover tooltip explaining what it means and how it's typically determined
+- **Splash Screen & Loading States** — a startup splash screen and visual feedback while calculating or generating reports
+- **Custom App Icon & Installer** — a dedicated application icon and a proper Windows installer with Desktop/Start Menu shortcuts and an uninstaller
 
 ## Screenshots
 
-| Design Method Selector | Charts |
+| Dashboard | Charts |
 |---|---|
-| ![Method Selector](screenshots/method-selector.png) | ![Charts](screenshots/charts.png) |
+| ![Dashboard](screenshots/dashboard.png) | ![Charts](screenshots/charts.png) |
 
-| Saved Projects | PDF Report |
+| Light Theme | Main Window |
 |---|---|
-| ![Saved Projects](screenshots/saved-projects.png) | ![PDF Report](screenshots/pdf-report.png) |
+| ![Light Theme](screenshots/light-theme.png) | ![Main Window](screenshots/main-window.png) |
+
+| PDF Report | Excel Report |
+|---|---|
+| ![PDF Report](screenshots/pdf-report.png) | ![Excel Report](screenshots/excel-report.png) |
 
 ## Download
 
@@ -91,7 +101,7 @@ python app.py
 The app is packaged into a standalone Windows executable using PyInstaller:
 
 ```bash
-python -m PyInstaller --name="ConcreteMixDesign" --windowed --onefile --icon=app_icon.ico --hidden-import=logic.mix_design --hidden-import=logic.is10262 --collect-all=numpy app.py
+python -m PyInstaller --name="ConcreteMixDesign" --windowed --onefile --icon=app_icon.ico --hidden-import=logic.mix_design --hidden-import=logic.is10262 --hidden-import=logic.bs_doe --collect-all=numpy app.py
 ```
 
 The executable is created in the `dist/` folder and requires no Python installation to run.
@@ -108,11 +118,11 @@ The installer is created in the `Output/` folder.
 
 ## How It Works
 
-1. **Inputs** — target strength, slump, max aggregate size, exposure condition, and either fineness modulus (ACI) or sand zone (IS 10262)
-2. **Water content** is looked up from the selected standard's table and interpolated/adjusted for slump
+1. **Inputs** — target strength, slump, max aggregate size, exposure condition, and (depending on the standard) fineness modulus, sand zone, or aggregate type
+2. **Water content** is looked up from the selected standard's table and adjusted for slump and aggregate shape
 3. **Water-cement ratio** is chosen as the stricter of the strength-based value and the exposure durability limit
-4. **Cement content** is derived from water ÷ w/c ratio (and checked against minimum cement requirements for IS 10262)
-5. **Aggregate proportions** are calculated from the standard's coarse aggregate volume tables, with the remainder allocated to fine aggregate
+4. **Cement content** is derived from water ÷ w/c ratio, checked against minimum cement requirements
+5. **Aggregate proportions** are calculated per the selected standard's method — volume-based (ACI, IS) or density/mass-based (BS/DOE)
 6. **Moisture correction** converts these lab quantities into real field quantities based on user-supplied aggregate moisture and absorption values
 7. **Batching, cost, and reporting** layers all build on top of this core result
 
@@ -122,13 +132,14 @@ The installer is created in the `Output/` folder.
 - `logic/`
   - `mix_design.py` — ACI 211.1 calculation engine
   - `is10262.py` — IS 10262:2019 calculation engine
+  - `bs_doe.py` — BS/DOE calculation engine
 - `database.py` — SQLite save/load/search/delete for projects
 - `charts_widget.py` — Matplotlib chart widgets
 - `report_generator.py` — PDF report generation (ReportLab)
+- `excel_exporter.py` — Excel report generation (openpyxl)
 - `app_icon.ico` — Application icon
 - `ConcreteMixDesign.iss` — Inno Setup installer script
 - `requirements.txt`
-
 
 ## Tech Stack
 
@@ -136,6 +147,7 @@ The installer is created in the `Output/` folder.
 - **SQLite** — local project storage
 - **Matplotlib** — chart rendering
 - **ReportLab** — PDF report generation
+- **openpyxl** — Excel report generation
 - **PyInstaller** — standalone executable packaging
 - **Inno Setup** — Windows installer creation
 
@@ -144,15 +156,9 @@ The installer is created in the `Output/` folder.
 Mix design calculations are based on:
 - **ACI 211.1** — Standard Practice for Selecting Proportions for Normal, Heavyweight, and Mass Concrete
 - **IS 10262:2019** — Concrete Mix Proportioning — Guidelines (with durability requirements from IS 456)
+- **BS/DOE** — British "Design of Normal Concrete Mixes" (Department of Environment) method
 
-These implementations follow the standard tables and procedures for design guidance. Actual site trial mixes with tested materials are recommended before full-scale production, as noted in the generated PDF reports.
-
-## Roadmap
-
-Planned for future versions:
-- Additional design standards (e.g. BS/DOE)
-- Batch history/version comparison for a single project
-- Export to Excel/CSV alongside PDF
+These implementations follow the standard tables and procedures for design guidance. Actual site trial mixes with tested materials are recommended before full-scale production, as noted in the generated reports.
 
 ## License
 
