@@ -3,37 +3,45 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QTableWidget,
     QTableWidgetItem, QFrame, QHeaderView, QTabWidget, QListWidget,
-    QListWidgetItem, QMessageBox, QScrollArea, QFileDialog
+    QListWidgetItem, QMessageBox, QScrollArea, QFileDialog, QSplashScreen,
+    QStackedWidget
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont, QColor
 
 from logic.mix_design import (
     calculate_mix as calculate_mix_aci,
     compute_batch_quantities, compute_cost_estimate, adjust_trial_mix
 )
 from logic.is10262 import calculate_mix as calculate_mix_is
-from database import init_db, save_project, get_all_projects, get_project, delete_project, search_projects
+from logic.bs_doe import calculate_mix as calculate_mix_bs
+from database import (
+    init_db, save_project, get_all_projects, get_project, delete_project,
+    search_projects, get_project_count
+)
 from report_generator import generate_pdf_report
+from excel_exporter import export_excel_report
 from charts_widget import ChartsWidget
 
 
 class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Concrete Mix Design — ACI 211.1 / IS 10262")
+        self.setWindowTitle("Concrete Mix Design — ACI 211.1 / IS 10262 / BS-DOE")
         self.setWindowIcon(QIcon("app_icon.ico"))
         self.resize(1200, 880)
         self.last_result = None
         self.last_batch_info = None
         self.last_cost_info = None
         self.last_trial_result = None
+        self.current_theme = "dark"
 
         init_db()
 
         self.build_ui()
         self.apply_styles()
         self.refresh_projects_list()
+        self.refresh_dashboard()
 
     def build_ui(self):
         main_layout = QHBoxLayout(self)
@@ -49,6 +57,11 @@ class MixDesignApp(QWidget):
         form_layout = QVBoxLayout(form_card)
         form_layout.setSpacing(14)
 
+        self.theme_btn = QPushButton("☀️  Light Mode")
+        self.theme_btn.setObjectName("themeBtn")
+        self.theme_btn.clicked.connect(self.toggle_theme)
+        form_layout.addWidget(self.theme_btn)
+
         title = QLabel("Mix Design Inputs")
         title.setObjectName("title")
         form_layout.addWidget(title)
@@ -57,13 +70,15 @@ class MixDesignApp(QWidget):
         subtitle.setObjectName("subtitle")
         form_layout.addWidget(subtitle)
 
-        # design method selector - drives which calculation engine runs
         method_label = QLabel("Design Method")
         method_label.setObjectName("sectionLabel")
         form_layout.addWidget(method_label)
 
         self.method_combo = QComboBox()
-        self.method_combo.addItems(["ACI 211.1", "IS 10262"])
+        self.method_combo.addItems(["ACI 211.1", "IS 10262", "BS/DOE"])
+        self.method_combo.setToolTip(
+            "Choose which standard's tables and procedure to use for the mix design calculation."
+        )
         self.method_combo.currentTextChanged.connect(self.on_method_changed)
         form_layout.addWidget(self.method_combo)
 
@@ -75,34 +90,69 @@ class MixDesignApp(QWidget):
         self.fck_input = QLineEdit()
         self.fck_input.setPlaceholderText("e.g. 30")
         grid.addWidget(self.fck_input, 0, 1)
+        self.fck_input.setToolTip(
+            "Target compressive strength of concrete (f'ck) in MPa.\n"
+            "This is the design strength specified by the structural engineer,\n"
+            "e.g. M25 concrete = 25 MPa."
+        )
 
         grid.addWidget(QLabel("Slump (mm)"), 1, 0)
         self.slump_input = QLineEdit()
         self.slump_input.setPlaceholderText("e.g. 100")
         grid.addWidget(self.slump_input, 1, 1)
+        self.slump_input.setToolTip(
+            "Desired workability of fresh concrete, measured by the slump test (mm).\n"
+            "Higher slump = more flowable mix. Typical range: 25-150mm."
+        )
 
         grid.addWidget(QLabel("Max Aggregate Size (mm)"), 2, 0)
         self.agg_size_combo = QComboBox()
         self.agg_size_combo.addItems(["10", "20", "40"])
         self.agg_size_combo.setCurrentText("20")
         grid.addWidget(self.agg_size_combo, 2, 1)
+        self.agg_size_combo.setToolTip(
+            "Maximum nominal size of coarse aggregate (mm) used in the mix.\n"
+            "Larger aggregate generally needs less cement paste."
+        )
 
         grid.addWidget(QLabel("Exposure Condition"), 3, 0)
         self.exposure_combo = QComboBox()
-        # 5 categories total - ACI only formally uses first 3, IS uses all 5
         self.exposure_combo.addItems(["mild", "moderate", "severe", "very_severe", "extreme"])
         grid.addWidget(self.exposure_combo, 3, 1)
+        self.exposure_combo.setToolTip(
+            "Environmental exposure condition of the structure.\n"
+            "Determines durability requirements (max w/c ratio, min cement, air content).\n"
+            "Mild: indoor/protected. Severe/Extreme: marine, chemical, or harsh weather exposure."
+        )
 
         grid.addWidget(QLabel("Fineness Modulus of Sand (ACI)"), 4, 0)
         self.fm_input = QLineEdit()
         self.fm_input.setPlaceholderText("e.g. 2.6")
         grid.addWidget(self.fm_input, 4, 1)
+        self.fm_input.setToolTip(
+            "Fineness Modulus of sand — a single number describing particle size distribution.\n"
+            "Typical range: 2.3 (fine sand) to 3.1 (coarse sand). Used only for ACI 211.1.\n"
+            "Obtained from a sieve analysis test."
+        )
 
-        grid.addWidget(QLabel("Sand Zone (IS 10262)"), 5, 0)
+        grid.addWidget(QLabel("Sand Zone (IS 10262 / BS-DOE)"), 5, 0)
         self.zone_combo = QComboBox()
         self.zone_combo.addItems(["I", "II", "III", "IV"])
         self.zone_combo.setCurrentText("II")
         grid.addWidget(self.zone_combo, 5, 1)
+        self.zone_combo.setToolTip(
+            "Grading zone of fine aggregate as per IS 383 (Zone I = coarsest, Zone IV = finest).\n"
+            "Used for IS 10262 and BS/DOE. Determined from a sieve analysis test."
+        )
+
+        grid.addWidget(QLabel("Aggregate Type (BS/DOE)"), 6, 0)
+        self.aggregate_type_combo = QComboBox()
+        self.aggregate_type_combo.addItems(["uncrushed", "crushed"])
+        grid.addWidget(self.aggregate_type_combo, 6, 1)
+        self.aggregate_type_combo.setToolTip(
+            "Shape of coarse aggregate — crushed (angular, e.g. crushed stone) needs more water\n"
+            "than uncrushed (rounded, e.g. natural gravel). Used only for BS/DOE."
+        )
 
         form_layout.addLayout(grid)
 
@@ -117,18 +167,32 @@ class MixDesignApp(QWidget):
         moisture_grid.addWidget(QLabel("Fine Agg. Moisture (%)"), 0, 0)
         self.fine_moisture_input = QLineEdit("0")
         moisture_grid.addWidget(self.fine_moisture_input, 0, 1)
+        self.fine_moisture_input.setToolTip(
+            "Total moisture content currently present in the fine aggregate (%), measured on site.\n"
+            "Leave at 0 if using dry (oven-dried) aggregate for lab-only calculations."
+        )
 
         moisture_grid.addWidget(QLabel("Fine Agg. Absorption (%)"), 1, 0)
         self.fine_absorption_input = QLineEdit("0")
         moisture_grid.addWidget(self.fine_absorption_input, 1, 1)
+        self.fine_absorption_input.setToolTip(
+            "Water absorption capacity of the fine aggregate (%) — how much water it can\n"
+            "absorb internally without contributing free water to the mix."
+        )
 
         moisture_grid.addWidget(QLabel("Coarse Agg. Moisture (%)"), 2, 0)
         self.coarse_moisture_input = QLineEdit("0")
         moisture_grid.addWidget(self.coarse_moisture_input, 2, 1)
+        self.coarse_moisture_input.setToolTip(
+            "Total moisture content currently present in the coarse aggregate (%), measured on site."
+        )
 
         moisture_grid.addWidget(QLabel("Coarse Agg. Absorption (%)"), 3, 0)
         self.coarse_absorption_input = QLineEdit("0")
         moisture_grid.addWidget(self.coarse_absorption_input, 3, 1)
+        self.coarse_absorption_input.setToolTip(
+            "Water absorption capacity of the coarse aggregate (%)."
+        )
 
         form_layout.addLayout(moisture_grid)
 
@@ -143,10 +207,16 @@ class MixDesignApp(QWidget):
         batch_grid.addWidget(QLabel("Total Volume Needed (m³)"), 0, 0)
         self.volume_input = QLineEdit("1")
         batch_grid.addWidget(self.volume_input, 0, 1)
+        self.volume_input.setToolTip(
+            "Total volume of concrete (in m³) you need to produce for this pour/project."
+        )
 
         batch_grid.addWidget(QLabel("Cement Bag Weight (kg)"), 1, 0)
         self.bag_weight_input = QLineEdit("50")
         batch_grid.addWidget(self.bag_weight_input, 1, 1)
+        self.bag_weight_input.setToolTip(
+            "Standard weight of one cement bag (kg). Commonly 50kg."
+        )
 
         form_layout.addLayout(batch_grid)
 
@@ -161,18 +231,30 @@ class MixDesignApp(QWidget):
         cost_grid.addWidget(QLabel("Cement Rate (per bag)"), 0, 0)
         self.cement_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.cement_rate_input, 0, 1)
+        self.cement_rate_input.setToolTip(
+            "Cost of one bag of cement in your local currency."
+        )
 
         cost_grid.addWidget(QLabel("Fine Aggregate Rate (per kg)"), 1, 0)
         self.fine_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.fine_rate_input, 1, 1)
+        self.fine_rate_input.setToolTip(
+            "Cost per kg of fine aggregate (sand) in your local currency."
+        )
 
         cost_grid.addWidget(QLabel("Coarse Aggregate Rate (per kg)"), 2, 0)
         self.coarse_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.coarse_rate_input, 2, 1)
+        self.coarse_rate_input.setToolTip(
+            "Cost per kg of coarse aggregate (crushed stone/gravel) in your local currency."
+        )
 
         cost_grid.addWidget(QLabel("Water Rate (per liter, optional)"), 3, 0)
         self.water_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.water_rate_input, 3, 1)
+        self.water_rate_input.setToolTip(
+            "Cost per liter of water, if applicable. Often negligible, can be left at 0."
+        )
 
         form_layout.addLayout(cost_grid)
 
@@ -188,14 +270,22 @@ class MixDesignApp(QWidget):
         self.actual_slump_input = QLineEdit()
         self.actual_slump_input.setPlaceholderText("e.g. 80")
         trial_grid.addWidget(self.actual_slump_input, 0, 1)
+        self.actual_slump_input.setToolTip(
+            "The slump you actually measured after casting a trial batch on site.\n"
+            "Compared against the target slump to calculate a correction."
+        )
 
         trial_grid.addWidget(QLabel("Water Adjustment Rate (kg per 10mm)"), 1, 0)
         self.water_adj_rate_input = QLineEdit("2.5")
         trial_grid.addWidget(self.water_adj_rate_input, 1, 1)
+        self.water_adj_rate_input.setToolTip(
+            "How much water (kg/m³) to add or remove per 10mm difference between\n"
+            "actual and target slump. Typical value: 2-3 kg per 10mm."
+        )
 
         form_layout.addLayout(trial_grid)
 
-        self.trial_btn = QPushButton("Compute Trial Adjustment")
+        self.trial_btn = QPushButton("🔧  Compute Trial Adjustment")
         self.trial_btn.setObjectName("trialBtn")
         self.trial_btn.clicked.connect(self.on_trial_adjust)
         form_layout.addWidget(self.trial_btn)
@@ -210,19 +300,24 @@ class MixDesignApp(QWidget):
 
         action_row = QHBoxLayout()
 
-        self.save_btn = QPushButton("Save Project")
+        self.save_btn = QPushButton("💾  Save Project")
         self.save_btn.setObjectName("saveBtn")
         self.save_btn.clicked.connect(self.on_save_project)
         action_row.addWidget(self.save_btn)
 
-        self.pdf_btn = QPushButton("Export PDF Report")
+        self.pdf_btn = QPushButton("📄  Export PDF Report")
         self.pdf_btn.setObjectName("pdfBtn")
         self.pdf_btn.clicked.connect(self.on_export_pdf)
         action_row.addWidget(self.pdf_btn)
 
+        self.excel_btn = QPushButton("📊  Export Excel")
+        self.excel_btn.setObjectName("excelBtn")
+        self.excel_btn.clicked.connect(self.on_export_excel)
+        action_row.addWidget(self.excel_btn)
+
         form_layout.addLayout(action_row)
 
-        self.calc_btn = QPushButton("Calculate Mix Design")
+        self.calc_btn = QPushButton("🧮  Calculate Mix Design")
         self.calc_btn.setObjectName("calcBtn")
         self.calc_btn.clicked.connect(self.on_calculate)
         form_layout.addWidget(self.calc_btn)
@@ -246,6 +341,7 @@ class MixDesignApp(QWidget):
 
         self.tabs = QTabWidget()
 
+        self.dashboard_tab = self.build_dashboard_tab()
         self.batch_design_table = self.make_result_table()
         self.field_table = self.make_result_table()
         self.site_batch_table = self.make_result_table()
@@ -254,6 +350,7 @@ class MixDesignApp(QWidget):
         self.charts_widget = ChartsWidget()
         self.projects_tab = self.build_projects_tab()
 
+        self.tabs.addTab(self.dashboard_tab, "🏠 Dashboard")
         self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
         self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
         self.tabs.addTab(self.site_batch_table, "Site Batching")
@@ -270,11 +367,72 @@ class MixDesignApp(QWidget):
         self.on_method_changed(self.method_combo.currentText())
 
     def on_method_changed(self, method_text):
-        # dono fields hamesha visible rehte hain, bas placeholder/labels se guide karte hain
-        # kaunsa field actually use hoga ye calculation ke waqt method se decide hota hai
         is_aci = "ACI" in method_text
+        is_bs = "BS" in method_text
+        is_is = ("IS" in method_text) and not is_bs
+
         self.fm_input.setEnabled(is_aci)
-        self.zone_combo.setEnabled(not is_aci)
+        self.zone_combo.setEnabled(is_is or is_bs)
+        self.aggregate_type_combo.setEnabled(is_bs)
+
+    def build_dashboard_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(16)
+
+        welcome = QLabel("Welcome back!")
+        welcome.setObjectName("title")
+        layout.addWidget(welcome)
+
+        self.dashboard_stats_label = QLabel("")
+        self.dashboard_stats_label.setObjectName("subtitle")
+        layout.addWidget(self.dashboard_stats_label)
+
+        recent_label = QLabel("RECENT PROJECTS")
+        recent_label.setObjectName("sectionLabel")
+        layout.addWidget(recent_label)
+
+        self.dashboard_recent_list = QListWidget()
+        self.dashboard_recent_list.itemDoubleClicked.connect(self.on_dashboard_load_project)
+        layout.addWidget(self.dashboard_recent_list)
+
+        hint = QLabel("Double-click a project to load it instantly.")
+        hint.setObjectName("subtitle")
+        layout.addWidget(hint)
+
+        layout.addStretch()
+        return tab
+
+    def refresh_dashboard(self):
+        count = get_project_count()
+        self.dashboard_stats_label.setText(f"You have {count} saved project(s).")
+
+        self.dashboard_recent_list.clear()
+        recent_rows = get_all_projects()[:5]
+        for project_id, name, created_at in recent_rows:
+            item = QListWidgetItem(f"{name}    ({created_at})")
+            item.setData(Qt.UserRole, project_id)
+            self.dashboard_recent_list.addItem(item)
+
+    def on_dashboard_load_project(self, item):
+        project_id = item.data(Qt.UserRole)
+        inputs, results = get_project(project_id)
+        if inputs is None:
+            QMessageBox.warning(self, "Error", "Failed to load the project.")
+            return
+
+        self.set_inputs(inputs)
+        self.last_result = results["mix"]
+        self.last_batch_info = results["batch"]
+        self.last_cost_info = results.get("cost", {
+            "cement_cost": 0, "fine_cost": 0, "coarse_cost": 0,
+            "water_cost": 0, "total_cost": 0, "cost_per_m3": 0
+        })
+        self.last_trial_result = None
+        self.populate_results(results["mix"], results["batch"], self.last_cost_info)
+        self.tabs.setCurrentWidget(self.field_table)
+
+        QMessageBox.information(self, "Loaded", "Project loaded successfully — view the results in the other tabs.")
 
     def build_projects_tab(self):
         tab = QWidget()
@@ -321,6 +479,7 @@ class MixDesignApp(QWidget):
             "exposure": self.exposure_combo.currentText(),
             "fm_sand": self.fm_input.text(),
             "zone": self.zone_combo.currentText(),
+            "aggregate_type": self.aggregate_type_combo.currentText(),
             "fine_moisture": self.fine_moisture_input.text(),
             "fine_absorption": self.fine_absorption_input.text(),
             "coarse_moisture": self.coarse_moisture_input.text(),
@@ -341,6 +500,7 @@ class MixDesignApp(QWidget):
         self.exposure_combo.setCurrentText(str(inputs["exposure"]))
         self.fm_input.setText(str(inputs["fm_sand"]))
         self.zone_combo.setCurrentText(str(inputs.get("zone", "II")))
+        self.aggregate_type_combo.setCurrentText(str(inputs.get("aggregate_type", "uncrushed")))
         self.fine_moisture_input.setText(str(inputs["fine_moisture"]))
         self.fine_absorption_input.setText(str(inputs["fine_absorption"]))
         self.coarse_moisture_input.setText(str(inputs["coarse_moisture"]))
@@ -354,6 +514,9 @@ class MixDesignApp(QWidget):
 
     def on_calculate(self):
         self.error_label.setText("")
+        self.calc_btn.setEnabled(False)
+        self.calc_btn.setText("⏳  Calculating...")
+        QApplication.processEvents()
 
         try:
             fck = float(self.fck_input.text())
@@ -362,6 +525,7 @@ class MixDesignApp(QWidget):
             exposure = self.exposure_combo.currentText()
             fm_sand = float(self.fm_input.text() or 0)
             zone = self.zone_combo.currentText()
+            aggregate_type = self.aggregate_type_combo.currentText()
 
             fine_moisture = float(self.fine_moisture_input.text() or 0)
             fine_absorption = float(self.fine_absorption_input.text() or 0)
@@ -377,15 +541,22 @@ class MixDesignApp(QWidget):
             water_rate = float(self.water_rate_input.text() or 0)
         except ValueError:
             self.error_label.setText("Please fill all fields correctly — numeric values only.")
+            self.calc_btn.setEnabled(True)
+            self.calc_btn.setText("🧮  Calculate Mix Design")
             return
 
         method = self.method_combo.currentText()
 
         if "ACI" in method:
-            # ACI formally only has 3 exposure categories - map extras down to severe
             aci_exposure = exposure if exposure in ("mild", "moderate", "severe") else "severe"
             result = calculate_mix_aci(
                 fck, slump, max_agg_size, aci_exposure, fm_sand,
+                fine_moisture, fine_absorption,
+                coarse_moisture, coarse_absorption
+            )
+        elif "BS" in method:
+            result = calculate_mix_bs(
+                fck, slump, max_agg_size, exposure, zone, aggregate_type,
                 fine_moisture, fine_absorption,
                 coarse_moisture, coarse_absorption
             )
@@ -405,6 +576,9 @@ class MixDesignApp(QWidget):
         self.last_cost_info = cost_info
 
         self.populate_results(result, batch_info, cost_info)
+
+        self.calc_btn.setEnabled(True)
+        self.calc_btn.setText("🧮  Calculate Mix Design")
 
     def on_trial_adjust(self):
         if self.last_result is None:
@@ -445,7 +619,6 @@ class MixDesignApp(QWidget):
             ("Air Content", f'{result["air_percent"]}%'),
         ]
 
-        # IS 10262-only extra info, add karo agar present hai
         if "target_mean_strength" in result:
             common_rows.insert(0, ("Target Mean Strength", f'{result["target_mean_strength"]} MPa'))
         if "min_cement_required" in result:
@@ -528,6 +701,7 @@ class MixDesignApp(QWidget):
         save_project(name, inputs, combined_results)
         self.project_name_input.clear()
         self.refresh_projects_list()
+        self.refresh_dashboard()
         QMessageBox.information(self, "Saved", f"Project '{name}' has been saved successfully.")
 
     def on_export_pdf(self):
@@ -543,6 +717,11 @@ class MixDesignApp(QWidget):
             return
 
         inputs = self.get_current_inputs()
+
+        self.pdf_btn.setEnabled(False)
+        self.pdf_btn.setText("⏳  Generating...")
+        QApplication.processEvents()
+
         try:
             import tempfile, os
             temp_dir = tempfile.gettempdir()
@@ -573,6 +752,45 @@ class MixDesignApp(QWidget):
             QMessageBox.information(self, "Exported", f"PDF report saved to:\n{file_path}")
         except Exception as e:
             QMessageBox.critical(self, "Export Failed", f"Could not generate PDF:\n{str(e)}")
+        finally:
+            self.pdf_btn.setEnabled(True)
+            self.pdf_btn.setText("📄  Export PDF Report")
+
+    def on_export_excel(self):
+        if self.last_result is None:
+            QMessageBox.warning(self, "Calculate First", "Please calculate the mix design before exporting.")
+            return
+
+        default_name = self.project_name_input.text().strip() or "mix_design_report"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Excel Report", f"{default_name}.xlsx", "Excel Files (*.xlsx)"
+        )
+        if not file_path:
+            return
+
+        inputs = self.get_current_inputs()
+
+        self.excel_btn.setEnabled(False)
+        self.excel_btn.setText("⏳  Generating...")
+        QApplication.processEvents()
+
+        try:
+            export_excel_report(
+                file_path,
+                self.project_name_input.text().strip(),
+                inputs,
+                self.last_result,
+                self.last_batch_info,
+                self.last_cost_info,
+                trial_result=self.last_trial_result,
+                method_name=inputs["method"]
+            )
+            QMessageBox.information(self, "Exported", f"Excel report saved to:\n{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", f"Could not generate Excel file:\n{str(e)}")
+        finally:
+            self.excel_btn.setEnabled(True)
+            self.excel_btn.setText("📊  Export Excel")
 
     def refresh_projects_list(self, keyword=None):
         self.projects_list.clear()
@@ -623,168 +841,298 @@ class MixDesignApp(QWidget):
         if confirm == QMessageBox.Yes:
             delete_project(project_id)
             self.refresh_projects_list()
+            self.refresh_dashboard()
 
     def apply_styles(self):
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #1e2530;
-                font-family: Segoe UI;
+        self.setStyleSheet(self.get_theme_stylesheet(self.current_theme))
+
+    def get_theme_stylesheet(self, theme):
+        if theme == "light":
+            bg_main = "#f4f6fa"
+            bg_card = "#ffffff"
+            border_color = "#d8dde6"
+            text_main = "#1e2530"
+            text_muted = "#6b7280"
+            input_bg = "#ffffff"
+            input_text = "#16191f"
+            table_bg = "#ffffff"
+            table_text = "#1e2530"
+            tab_bg = "#e9ecf3"
+        else:
+            bg_main = "#1a1f2b"
+            bg_card = "#242b3a"
+            border_color = "#313b52"
+            text_main = "#e6e9ef"
+            text_muted = "#8b94a8"
+            input_bg = "#ffffff"
+            input_text = "#16191f"
+            table_bg = "#1a1f2b"
+            table_text = "#ffffff"
+            tab_bg = "#1a1f2b"
+
+        return f"""
+            QWidget {{
+                background-color: {bg_main};
+                font-family: 'Segoe UI', sans-serif;
                 font-size: 13px;
-                color: #e6e9ef;
-            }
-            #formScroll {
+                color: {text_main};
+            }}
+            #formScroll {{
                 border: none;
                 background: transparent;
-            }
-            #card {
-                background-color: #262e3d;
-                border-radius: 12px;
-                padding: 20px;
-            }
-            #title {
-                font-size: 20px;
-                font-weight: bold;
-                color: #ffffff;
-            }
-            #subtitle {
+            }}
+            #card {{
+                background-color: {bg_card};
+                border: 1px solid {border_color};
+                border-radius: 14px;
+                padding: 24px;
+            }}
+            #title {{
+                font-size: 21px;
+                font-weight: 600;
+                color: {text_main};
+                letter-spacing: 0.2px;
+            }}
+            #subtitle {{
                 font-size: 12px;
-                color: #8b94a8;
-                margin-bottom: 6px;
-            }
-            #sectionLabel {
-                font-size: 13px;
-                font-weight: bold;
+                color: {text_muted};
+                margin-bottom: 10px;
+            }}
+            #sectionLabel {{
+                font-size: 12px;
+                font-weight: 600;
                 color: #4f8cff;
-                margin-top: 8px;
-            }
-            QLabel {
+                margin-top: 14px;
+                letter-spacing: 0.3px;
+                text-transform: uppercase;
+            }}
+            QLabel {{
                 font-size: 13px;
-                color: #c4cad6;
+                color: {text_main};
                 background: transparent;
-            }
-            QLineEdit {
-                background-color: #ffffff;
-                border: 1px solid #38425a;
-                border-radius: 6px;
-                padding: 8px;
-                color: #000000;
+            }}
+            QLineEdit {{
+                background-color: {input_bg};
+                border: 1.5px solid {border_color};
+                border-radius: 8px;
+                padding: 9px 10px;
+                color: {input_text};
                 font-size: 13px;
                 min-height: 24px;
-            }
-            QLineEdit:disabled {
+            }}
+            QLineEdit:disabled {{
                 background-color: #cfd3da;
                 color: #6b6b6b;
-            }
-            QLineEdit:focus {
-                border: 1px solid #4f8cff;
-            }
-            QComboBox {
-                background-color: #ffffff;
-                border: 1px solid #38425a;
-                border-radius: 6px;
-                padding: 8px;
-                color: #000000;
+            }}
+            QLineEdit:focus {{
+                border: 1.5px solid #4f8cff;
+            }}
+            QComboBox {{
+                background-color: {input_bg};
+                border: 1.5px solid {border_color};
+                border-radius: 8px;
+                padding: 9px 10px;
+                color: {input_text};
                 font-size: 13px;
                 min-height: 24px;
-            }
-            QComboBox:disabled {
+            }}
+            QComboBox:disabled {{
                 background-color: #cfd3da;
                 color: #6b6b6b;
-            }
-            QComboBox QAbstractItemView {
+            }}
+            QComboBox QAbstractItemView {{
                 background-color: #ffffff;
                 color: #000000;
                 selection-background-color: #4f8cff;
                 selection-color: #ffffff;
-            }
-            #calcBtn {
+            }}
+            #calcBtn {{
                 background-color: #4f8cff;
                 color: white;
-                font-weight: bold;
+                font-weight: 600;
                 font-size: 14px;
-                padding: 12px;
-                border-radius: 8px;
-                margin-top: 10px;
-            }
-            #calcBtn:hover {
+                padding: 13px;
+                border-radius: 10px;
+                border: none;
+                margin-top: 12px;
+            }}
+            #calcBtn:hover {{
                 background-color: #3d76e0;
-            }
-            #trialBtn {
+            }}
+            #calcBtn:pressed {{
+                background-color: #2e5fc4;
+            }}
+            #trialBtn {{
                 background-color: #9b59b6;
                 color: white;
-                font-weight: bold;
-                padding: 10px;
-                border-radius: 6px;
-            }
-            #trialBtn:hover {
+                font-weight: 600;
+                padding: 11px;
+                border-radius: 8px;
+                border: none;
+            }}
+            #trialBtn:hover {{
                 background-color: #8e44ad;
-            }
-            #saveBtn {
+            }}
+            #saveBtn {{
                 background-color: #2ecc71;
                 color: white;
-                font-weight: bold;
-                padding: 8px 14px;
-                border-radius: 6px;
-            }
-            #saveBtn:hover {
+                font-weight: 600;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
+            }}
+            #saveBtn:hover {{
                 background-color: #27ae60;
-            }
-            #pdfBtn {
+            }}
+            #pdfBtn {{
                 background-color: #f39c12;
                 color: white;
-                font-weight: bold;
-                padding: 8px 14px;
-                border-radius: 6px;
-            }
-            #pdfBtn:hover {
+                font-weight: 600;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
+            }}
+            #pdfBtn:hover {{
                 background-color: #d68910;
-            }
-            #deleteBtn {
+            }}
+            #excelBtn {{
+                background-color: #16a34a;
+                color: white;
+                font-weight: 600;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
+            }}
+            #excelBtn:hover {{
+                background-color: #128a3e;
+            }}
+            #deleteBtn {{
                 background-color: #e74c3c;
                 color: white;
-                font-weight: bold;
-                padding: 8px 14px;
-                border-radius: 6px;
-            }
-            #deleteBtn:hover {
+                font-weight: 600;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
+            }}
+            #deleteBtn:hover {{
                 background-color: #c0392b;
-            }
-            #errorLabel {
+            }}
+            #themeBtn {{
+                background-color: {bg_card};
+                color: {text_main};
+                border: 1.5px solid {border_color};
+                font-weight: 600;
+                padding: 8px 14px;
+                border-radius: 8px;
+            }}
+            #themeBtn:hover {{
+                background-color: {border_color};
+            }}
+            #errorLabel {{
                 color: #ff6b6b;
                 font-size: 12px;
-                margin-top: 6px;
-            }
-            QTableWidget, QListWidget {
-                background-color: #1a2029;
-                border: 1px solid #38425a;
-                border-radius: 6px;
-                gridline-color: #2c3547;
-                color: #ffffff;
-            }
-            QHeaderView::section {
+                margin-top: 8px;
+            }}
+            QTableWidget, QListWidget {{
+                background-color: {table_bg};
+                border: 1px solid {border_color};
+                border-radius: 10px;
+                gridline-color: {border_color};
+                color: {table_text};
+                selection-background-color: #2e3a52;
+            }}
+            QTableWidget::item, QListWidget::item {{
+                padding: 6px 4px;
+            }}
+            QHeaderView::section {{
                 background-color: #2c3547;
                 color: #ffffff;
-                padding: 6px;
+                padding: 8px;
                 border: none;
-                font-weight: bold;
-            }
-            QTabBar::tab {
-                background-color: #1a2029;
-                color: #8b94a8;
-                padding: 8px 16px;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-            }
-            QTabBar::tab:selected {
+                font-weight: 600;
+                font-size: 12px;
+            }}
+            QTabWidget::pane {{
+                border: none;
+                margin-top: 4px;
+            }}
+            QTabBar::tab {{
+                background-color: {tab_bg};
+                color: {text_muted};
+                padding: 9px 18px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                font-size: 12px;
+                margin-right: 2px;
+            }}
+            QTabBar::tab:selected {{
                 background-color: #4f8cff;
                 color: white;
-            }
-        """)
+                font-weight: 600;
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: {border_color};
+            }}
+            QScrollBar:vertical {{
+                background: {bg_main};
+                width: 10px;
+                border-radius: 5px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {border_color};
+                border-radius: 5px;
+                min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: #4f8cff;
+            }}
+        """
+
+    def toggle_theme(self):
+        self.current_theme = "light" if self.current_theme == "dark" else "dark"
+        self.apply_styles()
+        self.theme_btn.setText("☀️  Light Mode" if self.current_theme == "dark" else "🌙  Dark Mode")
+
+
+def create_splash_pixmap():
+    pixmap = QPixmap(500, 300)
+    pixmap.fill(QColor("#1a1f2b"))
+
+    painter = QPainter(pixmap)
+    painter.setPen(QColor("#4f8cff"))
+    title_font = QFont("Segoe UI", 22, QFont.Bold)
+    painter.setFont(title_font)
+    painter.drawText(pixmap.rect().adjusted(0, -30, 0, 0), Qt.AlignCenter, "Concrete Mix Design")
+
+    painter.setPen(QColor("#8b94a8"))
+    sub_font = QFont("Segoe UI", 11)
+    painter.setFont(sub_font)
+    painter.drawText(pixmap.rect().adjusted(0, 40, 0, 0), Qt.AlignCenter, "ACI 211.1  •  IS 10262  •  BS/DOE")
+
+    painter.setPen(QColor("#5b6b8c"))
+    small_font = QFont("Segoe UI", 9)
+    painter.setFont(small_font)
+    painter.drawText(pixmap.rect().adjusted(0, 100, 0, -20), Qt.AlignBottom | Qt.AlignHCenter, "Loading...")
+
+    painter.end()
+    return pixmap
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    splash_pix = create_splash_pixmap()
+    splash = QSplashScreen(splash_pix)
+    splash.show()
+    app.processEvents()
+
     window = MixDesignApp()
-    window.show()
+
+    def show_main_window():
+        window.show()
+        splash.finish(window)
+
+    QTimer.singleShot(1500, show_main_window)
+
     sys.exit(app.exec())

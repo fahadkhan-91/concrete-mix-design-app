@@ -44,7 +44,8 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
     elements.append(Paragraph("1. Input Summary", section_style))
 
     elements.append(Paragraph("Design Parameters", subsection_style))
-    is_method = "IS" in method_name
+    is_method = ("IS" in method_name) and ("BS" not in method_name)
+    is_bs_method = "BS" in method_name
 
     design_rows = [
         ["Parameter", "Value"],
@@ -53,10 +54,13 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
         ["Max Aggregate Size", f"{inputs['max_agg_size']} mm"],
         ["Exposure Condition", inputs['exposure'].replace("_", " ").capitalize()],
     ]
-    if is_method:
+    if is_method or is_bs_method:
         design_rows.append(["Sand Zone", inputs.get('zone', 'II')])
     else:
         design_rows.append(["Fineness Modulus of Sand", inputs['fm_sand']])
+
+    if is_bs_method:
+        design_rows.append(["Aggregate Type", inputs.get('aggregate_type', 'uncrushed').capitalize()])
     elements.append(make_table(design_rows))
 
     elements.append(Paragraph("Aggregate Moisture Correction", subsection_style))
