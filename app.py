@@ -24,12 +24,19 @@ from excel_exporter import export_excel_report
 from charts_widget import ChartsWidget
 
 
+WIZARD_STEP_TITLES = [
+    "Step 1 of 3: Design Basics",
+    "Step 2 of 3: Site & Moisture",
+    "Step 3 of 3: Costs & Review",
+]
+
+
 class MixDesignApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Concrete Mix Design — ACI 211.1 / IS 10262 / BS-DOE")
         self.setWindowIcon(QIcon("app_icon.ico"))
-        self.resize(1200, 880)
+        self.resize(1250, 880)
         self.last_result = None
         self.last_batch_info = None
         self.last_cost_info = None
@@ -43,36 +50,156 @@ class MixDesignApp(QWidget):
         self.refresh_projects_list()
         self.refresh_dashboard()
 
+    # ================= TOP-LEVEL LAYOUT =================
+
     def build_ui(self):
         main_layout = QHBoxLayout(self)
-        main_layout.setSpacing(20)
-        main_layout.setContentsMargins(25, 25, 25, 25)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        form_scroll = QScrollArea()
-        form_scroll.setWidgetResizable(True)
-        form_scroll.setObjectName("formScroll")
+        sidebar = self.build_sidebar()
+        main_layout.addWidget(sidebar)
 
-        form_card = QFrame()
-        form_card.setObjectName("card")
-        form_layout = QVBoxLayout(form_card)
-        form_layout.setSpacing(14)
+        content_wrapper = QWidget()
+        content_layout = QVBoxLayout(content_wrapper)
+        content_layout.setContentsMargins(20, 20, 20, 20)
+
+        self.content_stack = QStackedWidget()
+        content_layout.addWidget(self.content_stack)
+
+        self.dashboard_page = self.build_dashboard_page()
+        self.wizard_page = self.build_wizard_page()
+        self.results_page = self.build_results_page()
+        self.projects_page = self.build_projects_page()
+
+        self.content_stack.addWidget(self.dashboard_page)   # index 0
+        self.content_stack.addWidget(self.wizard_page)       # index 1
+        self.content_stack.addWidget(self.results_page)      # index 2
+        self.content_stack.addWidget(self.projects_page)     # index 3
+
+        main_layout.addWidget(content_wrapper, 1)
+
+        self.show_page(0)
+        self.on_method_changed(self.method_combo.currentText())
+
+    def build_sidebar(self):
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(160)
+
+        layout = QVBoxLayout(sidebar)
+        layout.setContentsMargins(12, 20, 12, 20)
+        layout.setSpacing(6)
+
+        logo = QLabel("🧱 Mix Design")
+        logo.setObjectName("sidebarLogo")
+        layout.addWidget(logo)
+        layout.addSpacing(20)
+
+        self.sidebar_buttons = []
+        nav_items = [
+            ("🏠  Dashboard", 0),
+            ("🧮  New Design", 1),
+            ("📁  Saved Projects", 3),
+        ]
+        for label, page_index in nav_items:
+            btn = QPushButton(label)
+            btn.setObjectName("sidebarBtn")
+            btn.setCheckable(True)
+            btn.clicked.connect(lambda checked, idx=page_index: self.show_page(idx))
+            layout.addWidget(btn)
+            self.sidebar_buttons.append((btn, page_index))
+
+        layout.addStretch()
 
         self.theme_btn = QPushButton("☀️  Light Mode")
         self.theme_btn.setObjectName("themeBtn")
         self.theme_btn.clicked.connect(self.toggle_theme)
-        form_layout.addWidget(self.theme_btn)
+        layout.addWidget(self.theme_btn)
 
-        title = QLabel("Mix Design Inputs")
-        title.setObjectName("title")
-        form_layout.addWidget(title)
+        return sidebar
 
-        subtitle = QLabel("Choose a design method below")
-        subtitle.setObjectName("subtitle")
-        form_layout.addWidget(subtitle)
+    def show_page(self, index):
+        self.content_stack.setCurrentIndex(index)
+        for btn, page_index in self.sidebar_buttons:
+            btn.setChecked(page_index == index)
 
-        method_label = QLabel("Design Method")
-        method_label.setObjectName("sectionLabel")
-        form_layout.addWidget(method_label)
+    # ================= DASHBOARD PAGE =================
+
+    def build_dashboard_page(self):
+        page = QFrame()
+        page.setObjectName("card")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(16)
+
+        welcome = QLabel("Welcome back!")
+        welcome.setObjectName("title")
+        layout.addWidget(welcome)
+
+        self.dashboard_stats_label = QLabel("")
+        self.dashboard_stats_label.setObjectName("subtitle")
+        layout.addWidget(self.dashboard_stats_label)
+
+        recent_label = QLabel("RECENT PROJECTS")
+        recent_label.setObjectName("sectionLabel")
+        layout.addWidget(recent_label)
+
+        self.dashboard_recent_list = QListWidget()
+        self.dashboard_recent_list.itemDoubleClicked.connect(self.on_dashboard_load_project)
+        layout.addWidget(self.dashboard_recent_list)
+
+        hint = QLabel("Double-click a project to load it instantly.")
+        hint.setObjectName("subtitle")
+        layout.addWidget(hint)
+
+        new_design_btn = QPushButton("🧮  Start a New Design")
+        new_design_btn.setObjectName("calcBtn")
+        new_design_btn.clicked.connect(lambda: self.show_page(1))
+        layout.addWidget(new_design_btn)
+
+        return page
+
+    def refresh_dashboard(self):
+        count = get_project_count()
+        self.dashboard_stats_label.setText(f"You have {count} saved project(s).")
+
+        self.dashboard_recent_list.clear()
+        recent_rows = get_all_projects()[:5]
+        for project_id, name, created_at in recent_rows:
+            item = QListWidgetItem(f"{name}    ({created_at})")
+            item.setData(Qt.UserRole, project_id)
+            self.dashboard_recent_list.addItem(item)
+
+    def on_dashboard_load_project(self, item):
+        project_id = item.data(Qt.UserRole)
+        inputs, results = get_project(project_id)
+        if inputs is None:
+            QMessageBox.warning(self, "Error", "Failed to load the project.")
+            return
+
+        self.set_inputs(inputs)
+        self.last_result = results["mix"]
+        self.last_batch_info = results["batch"]
+        self.last_cost_info = results.get("cost", {
+            "cement_cost": 0, "fine_cost": 0, "coarse_cost": 0,
+            "water_cost": 0, "total_cost": 0, "cost_per_m3": 0
+        })
+        self.last_trial_result = None
+        self.populate_results(results["mix"], results["batch"], self.last_cost_info)
+        self.show_page(2)
+        self.tabs.setCurrentWidget(self.field_table)
+
+    # ================= WIZARD PAGE (NEW DESIGN) =================
+
+    def build_wizard_page(self):
+        page = QFrame()
+        page.setObjectName("card")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
+
+        self.wizard_progress_label = QLabel(WIZARD_STEP_TITLES[0])
+        self.wizard_progress_label.setObjectName("title")
+        layout.addWidget(self.wizard_progress_label)
 
         self.method_combo = QComboBox()
         self.method_combo.addItems(["ACI 211.1", "IS 10262", "BS/DOE"])
@@ -80,7 +207,30 @@ class MixDesignApp(QWidget):
             "Choose which standard's tables and procedure to use for the mix design calculation."
         )
         self.method_combo.currentTextChanged.connect(self.on_method_changed)
-        form_layout.addWidget(self.method_combo)
+
+        self.wizard_stack = QStackedWidget()
+        layout.addWidget(self.wizard_stack)
+
+        self.wizard_stack.addWidget(self.build_wizard_step1())
+        self.wizard_stack.addWidget(self.build_wizard_step2())
+        self.wizard_stack.addWidget(self.build_wizard_step3())
+
+        self.error_label = QLabel("")
+        self.error_label.setObjectName("errorLabel")
+        self.error_label.setWordWrap(True)
+        layout.addWidget(self.error_label)
+
+        return page
+
+    def build_wizard_step1(self):
+        step = QWidget()
+        step_layout = QVBoxLayout(step)
+        step_layout.setSpacing(12)
+
+        method_label = QLabel("Design Method")
+        method_label.setObjectName("sectionLabel")
+        step_layout.addWidget(method_label)
+        step_layout.addWidget(self.method_combo)
 
         grid = QGridLayout()
         grid.setVerticalSpacing(12)
@@ -121,8 +271,7 @@ class MixDesignApp(QWidget):
         grid.addWidget(self.exposure_combo, 3, 1)
         self.exposure_combo.setToolTip(
             "Environmental exposure condition of the structure.\n"
-            "Determines durability requirements (max w/c ratio, min cement, air content).\n"
-            "Mild: indoor/protected. Severe/Extreme: marine, chemical, or harsh weather exposure."
+            "Determines durability requirements (max w/c ratio, min cement, air content)."
         )
 
         grid.addWidget(QLabel("Fineness Modulus of Sand (ACI)"), 4, 0)
@@ -130,9 +279,7 @@ class MixDesignApp(QWidget):
         self.fm_input.setPlaceholderText("e.g. 2.6")
         grid.addWidget(self.fm_input, 4, 1)
         self.fm_input.setToolTip(
-            "Fineness Modulus of sand — a single number describing particle size distribution.\n"
-            "Typical range: 2.3 (fine sand) to 3.1 (coarse sand). Used only for ACI 211.1.\n"
-            "Obtained from a sieve analysis test."
+            "Fineness Modulus of sand. Typical range: 2.3 to 3.1. Used only for ACI 211.1."
         )
 
         grid.addWidget(QLabel("Sand Zone (IS 10262 / BS-DOE)"), 5, 0)
@@ -141,8 +288,7 @@ class MixDesignApp(QWidget):
         self.zone_combo.setCurrentText("II")
         grid.addWidget(self.zone_combo, 5, 1)
         self.zone_combo.setToolTip(
-            "Grading zone of fine aggregate as per IS 383 (Zone I = coarsest, Zone IV = finest).\n"
-            "Used for IS 10262 and BS/DOE. Determined from a sieve analysis test."
+            "Grading zone of fine aggregate as per IS 383. Used for IS 10262 and BS/DOE."
         )
 
         grid.addWidget(QLabel("Aggregate Type (BS/DOE)"), 6, 0)
@@ -150,15 +296,30 @@ class MixDesignApp(QWidget):
         self.aggregate_type_combo.addItems(["uncrushed", "crushed"])
         grid.addWidget(self.aggregate_type_combo, 6, 1)
         self.aggregate_type_combo.setToolTip(
-            "Shape of coarse aggregate — crushed (angular, e.g. crushed stone) needs more water\n"
-            "than uncrushed (rounded, e.g. natural gravel). Used only for BS/DOE."
+            "Shape of coarse aggregate — crushed needs more water than uncrushed. Used only for BS/DOE."
         )
 
-        form_layout.addLayout(grid)
+        step_layout.addLayout(grid)
+        step_layout.addStretch()
+
+        nav_row = QHBoxLayout()
+        nav_row.addStretch()
+        next_btn = QPushButton("Next →")
+        next_btn.setObjectName("wizardNavBtn")
+        next_btn.clicked.connect(self.next_step)
+        nav_row.addWidget(next_btn)
+        step_layout.addLayout(nav_row)
+
+        return step
+
+    def build_wizard_step2(self):
+        step = QWidget()
+        step_layout = QVBoxLayout(step)
+        step_layout.setSpacing(12)
 
         moisture_label = QLabel("Aggregate Moisture Correction (optional, defaults to 0)")
         moisture_label.setObjectName("sectionLabel")
-        form_layout.addWidget(moisture_label)
+        step_layout.addWidget(moisture_label)
 
         moisture_grid = QGridLayout()
         moisture_grid.setVerticalSpacing(12)
@@ -168,16 +329,14 @@ class MixDesignApp(QWidget):
         self.fine_moisture_input = QLineEdit("0")
         moisture_grid.addWidget(self.fine_moisture_input, 0, 1)
         self.fine_moisture_input.setToolTip(
-            "Total moisture content currently present in the fine aggregate (%), measured on site.\n"
-            "Leave at 0 if using dry (oven-dried) aggregate for lab-only calculations."
+            "Total moisture content currently present in the fine aggregate (%), measured on site."
         )
 
         moisture_grid.addWidget(QLabel("Fine Agg. Absorption (%)"), 1, 0)
         self.fine_absorption_input = QLineEdit("0")
         moisture_grid.addWidget(self.fine_absorption_input, 1, 1)
         self.fine_absorption_input.setToolTip(
-            "Water absorption capacity of the fine aggregate (%) — how much water it can\n"
-            "absorb internally without contributing free water to the mix."
+            "Water absorption capacity of the fine aggregate (%)."
         )
 
         moisture_grid.addWidget(QLabel("Coarse Agg. Moisture (%)"), 2, 0)
@@ -194,11 +353,11 @@ class MixDesignApp(QWidget):
             "Water absorption capacity of the coarse aggregate (%)."
         )
 
-        form_layout.addLayout(moisture_grid)
+        step_layout.addLayout(moisture_grid)
 
         batch_label = QLabel("Batch / Site Quantity")
         batch_label.setObjectName("sectionLabel")
-        form_layout.addWidget(batch_label)
+        step_layout.addWidget(batch_label)
 
         batch_grid = QGridLayout()
         batch_grid.setVerticalSpacing(12)
@@ -218,11 +377,31 @@ class MixDesignApp(QWidget):
             "Standard weight of one cement bag (kg). Commonly 50kg."
         )
 
-        form_layout.addLayout(batch_grid)
+        step_layout.addLayout(batch_grid)
+        step_layout.addStretch()
+
+        nav_row = QHBoxLayout()
+        back_btn = QPushButton("← Back")
+        back_btn.setObjectName("wizardNavBtn")
+        back_btn.clicked.connect(self.prev_step)
+        nav_row.addWidget(back_btn)
+        nav_row.addStretch()
+        next_btn = QPushButton("Next →")
+        next_btn.setObjectName("wizardNavBtn")
+        next_btn.clicked.connect(self.next_step)
+        nav_row.addWidget(next_btn)
+        step_layout.addLayout(nav_row)
+
+        return step
+
+    def build_wizard_step3(self):
+        step = QWidget()
+        step_layout = QVBoxLayout(step)
+        step_layout.setSpacing(12)
 
         cost_label = QLabel("Material Rates (for cost estimation)")
         cost_label.setObjectName("sectionLabel")
-        form_layout.addWidget(cost_label)
+        step_layout.addWidget(cost_label)
 
         cost_grid = QGridLayout()
         cost_grid.setVerticalSpacing(12)
@@ -231,140 +410,62 @@ class MixDesignApp(QWidget):
         cost_grid.addWidget(QLabel("Cement Rate (per bag)"), 0, 0)
         self.cement_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.cement_rate_input, 0, 1)
-        self.cement_rate_input.setToolTip(
-            "Cost of one bag of cement in your local currency."
-        )
+        self.cement_rate_input.setToolTip("Cost of one bag of cement in your local currency.")
 
         cost_grid.addWidget(QLabel("Fine Aggregate Rate (per kg)"), 1, 0)
         self.fine_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.fine_rate_input, 1, 1)
-        self.fine_rate_input.setToolTip(
-            "Cost per kg of fine aggregate (sand) in your local currency."
-        )
+        self.fine_rate_input.setToolTip("Cost per kg of fine aggregate (sand).")
 
         cost_grid.addWidget(QLabel("Coarse Aggregate Rate (per kg)"), 2, 0)
         self.coarse_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.coarse_rate_input, 2, 1)
-        self.coarse_rate_input.setToolTip(
-            "Cost per kg of coarse aggregate (crushed stone/gravel) in your local currency."
-        )
+        self.coarse_rate_input.setToolTip("Cost per kg of coarse aggregate.")
 
         cost_grid.addWidget(QLabel("Water Rate (per liter, optional)"), 3, 0)
         self.water_rate_input = QLineEdit("0")
         cost_grid.addWidget(self.water_rate_input, 3, 1)
-        self.water_rate_input.setToolTip(
-            "Cost per liter of water, if applicable. Often negligible, can be left at 0."
-        )
+        self.water_rate_input.setToolTip("Cost per liter of water, if applicable.")
 
-        form_layout.addLayout(cost_grid)
-
-        trial_label = QLabel("Trial Mix Adjustment (after site trial batch)")
-        trial_label.setObjectName("sectionLabel")
-        form_layout.addWidget(trial_label)
-
-        trial_grid = QGridLayout()
-        trial_grid.setVerticalSpacing(12)
-        trial_grid.setHorizontalSpacing(10)
-
-        trial_grid.addWidget(QLabel("Actual Measured Slump (mm)"), 0, 0)
-        self.actual_slump_input = QLineEdit()
-        self.actual_slump_input.setPlaceholderText("e.g. 80")
-        trial_grid.addWidget(self.actual_slump_input, 0, 1)
-        self.actual_slump_input.setToolTip(
-            "The slump you actually measured after casting a trial batch on site.\n"
-            "Compared against the target slump to calculate a correction."
-        )
-
-        trial_grid.addWidget(QLabel("Water Adjustment Rate (kg per 10mm)"), 1, 0)
-        self.water_adj_rate_input = QLineEdit("2.5")
-        trial_grid.addWidget(self.water_adj_rate_input, 1, 1)
-        self.water_adj_rate_input.setToolTip(
-            "How much water (kg/m³) to add or remove per 10mm difference between\n"
-            "actual and target slump. Typical value: 2-3 kg per 10mm."
-        )
-
-        form_layout.addLayout(trial_grid)
-
-        self.trial_btn = QPushButton("🔧  Compute Trial Adjustment")
-        self.trial_btn.setObjectName("trialBtn")
-        self.trial_btn.clicked.connect(self.on_trial_adjust)
-        form_layout.addWidget(self.trial_btn)
+        step_layout.addLayout(cost_grid)
 
         save_label = QLabel("Project Name (for saving / report)")
         save_label.setObjectName("sectionLabel")
-        form_layout.addWidget(save_label)
+        step_layout.addWidget(save_label)
 
         self.project_name_input = QLineEdit()
         self.project_name_input.setPlaceholderText("e.g. Site A - Column Mix")
-        form_layout.addWidget(self.project_name_input)
+        step_layout.addWidget(self.project_name_input)
 
-        action_row = QHBoxLayout()
+        step_layout.addStretch()
 
-        self.save_btn = QPushButton("💾  Save Project")
-        self.save_btn.setObjectName("saveBtn")
-        self.save_btn.clicked.connect(self.on_save_project)
-        action_row.addWidget(self.save_btn)
-
-        self.pdf_btn = QPushButton("📄  Export PDF Report")
-        self.pdf_btn.setObjectName("pdfBtn")
-        self.pdf_btn.clicked.connect(self.on_export_pdf)
-        action_row.addWidget(self.pdf_btn)
-
-        self.excel_btn = QPushButton("📊  Export Excel")
-        self.excel_btn.setObjectName("excelBtn")
-        self.excel_btn.clicked.connect(self.on_export_excel)
-        action_row.addWidget(self.excel_btn)
-
-        form_layout.addLayout(action_row)
+        nav_row = QHBoxLayout()
+        back_btn = QPushButton("← Back")
+        back_btn.setObjectName("wizardNavBtn")
+        back_btn.clicked.connect(self.prev_step)
+        nav_row.addWidget(back_btn)
+        nav_row.addStretch()
 
         self.calc_btn = QPushButton("🧮  Calculate Mix Design")
         self.calc_btn.setObjectName("calcBtn")
         self.calc_btn.clicked.connect(self.on_calculate)
-        form_layout.addWidget(self.calc_btn)
+        nav_row.addWidget(self.calc_btn)
 
-        self.error_label = QLabel("")
-        self.error_label.setObjectName("errorLabel")
-        self.error_label.setWordWrap(True)
-        form_layout.addWidget(self.error_label)
+        step_layout.addLayout(nav_row)
 
-        form_layout.addStretch()
+        return step
 
-        form_scroll.setWidget(form_card)
+    def next_step(self):
+        idx = self.wizard_stack.currentIndex()
+        if idx < 2:
+            self.wizard_stack.setCurrentIndex(idx + 1)
+            self.wizard_progress_label.setText(WIZARD_STEP_TITLES[idx + 1])
 
-        result_card = QFrame()
-        result_card.setObjectName("card")
-        result_layout = QVBoxLayout(result_card)
-
-        result_title = QLabel("Mix Design Results")
-        result_title.setObjectName("title")
-        result_layout.addWidget(result_title)
-
-        self.tabs = QTabWidget()
-
-        self.dashboard_tab = self.build_dashboard_tab()
-        self.batch_design_table = self.make_result_table()
-        self.field_table = self.make_result_table()
-        self.site_batch_table = self.make_result_table()
-        self.cost_table = self.make_result_table()
-        self.trial_table = self.make_result_table()
-        self.charts_widget = ChartsWidget()
-        self.projects_tab = self.build_projects_tab()
-
-        self.tabs.addTab(self.dashboard_tab, "🏠 Dashboard")
-        self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
-        self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
-        self.tabs.addTab(self.site_batch_table, "Site Batching")
-        self.tabs.addTab(self.cost_table, "Cost Estimation")
-        self.tabs.addTab(self.trial_table, "Trial Mix Adjustment")
-        self.tabs.addTab(self.charts_widget, "Charts")
-        self.tabs.addTab(self.projects_tab, "Saved Projects")
-
-        result_layout.addWidget(self.tabs)
-
-        main_layout.addWidget(form_scroll, 1)
-        main_layout.addWidget(result_card, 1)
-
-        self.on_method_changed(self.method_combo.currentText())
+    def prev_step(self):
+        idx = self.wizard_stack.currentIndex()
+        if idx > 0:
+            self.wizard_stack.setCurrentIndex(idx - 1)
+            self.wizard_progress_label.setText(WIZARD_STEP_TITLES[idx - 1])
 
     def on_method_changed(self, method_text):
         is_aci = "ACI" in method_text
@@ -375,68 +476,115 @@ class MixDesignApp(QWidget):
         self.zone_combo.setEnabled(is_is or is_bs)
         self.aggregate_type_combo.setEnabled(is_bs)
 
-    def build_dashboard_tab(self):
+    # ================= RESULTS PAGE =================
+
+    def build_results_page(self):
+        page = QFrame()
+        page.setObjectName("card")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
+
+        top_row = QHBoxLayout()
+        result_title = QLabel("Mix Design Results")
+        result_title.setObjectName("title")
+        top_row.addWidget(result_title)
+        top_row.addStretch()
+
+        edit_btn = QPushButton("✏️  Edit Inputs")
+        edit_btn.setObjectName("wizardNavBtn")
+        edit_btn.clicked.connect(lambda: self.show_page(1))
+        top_row.addWidget(edit_btn)
+
+        self.save_btn = QPushButton("💾  Save Project")
+        self.save_btn.setObjectName("saveBtn")
+        self.save_btn.clicked.connect(self.on_save_project)
+        top_row.addWidget(self.save_btn)
+
+        self.pdf_btn = QPushButton("📄  Export PDF")
+        self.pdf_btn.setObjectName("pdfBtn")
+        self.pdf_btn.clicked.connect(self.on_export_pdf)
+        top_row.addWidget(self.pdf_btn)
+
+        self.excel_btn = QPushButton("📊  Export Excel")
+        self.excel_btn.setObjectName("excelBtn")
+        self.excel_btn.clicked.connect(self.on_export_excel)
+        top_row.addWidget(self.excel_btn)
+
+        layout.addLayout(top_row)
+
+        self.tabs = QTabWidget()
+
+        self.batch_design_table = self.make_result_table()
+        self.field_table = self.make_result_table()
+        self.site_batch_table = self.make_result_table()
+        self.cost_table = self.make_result_table()
+        self.trial_tab = self.build_trial_tab()
+        self.charts_widget = ChartsWidget()
+
+        self.tabs.addTab(self.batch_design_table, "Batch (Dry) Quantities")
+        self.tabs.addTab(self.field_table, "Field (Moisture Adjusted)")
+        self.tabs.addTab(self.site_batch_table, "Site Batching")
+        self.tabs.addTab(self.cost_table, "Cost Estimation")
+        self.tabs.addTab(self.trial_tab, "Trial Mix Adjustment")
+        self.tabs.addTab(self.charts_widget, "Charts")
+
+        layout.addWidget(self.tabs)
+
+        return page
+
+    def build_trial_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setSpacing(16)
+        layout.setSpacing(10)
 
-        welcome = QLabel("Welcome back!")
-        welcome.setObjectName("title")
-        layout.addWidget(welcome)
+        form_row = QGridLayout()
+        form_row.addWidget(QLabel("Actual Measured Slump (mm)"), 0, 0)
+        self.actual_slump_input = QLineEdit()
+        self.actual_slump_input.setPlaceholderText("e.g. 80")
+        form_row.addWidget(self.actual_slump_input, 0, 1)
+        self.actual_slump_input.setToolTip(
+            "The slump you actually measured after casting a trial batch on site."
+        )
 
-        self.dashboard_stats_label = QLabel("")
-        self.dashboard_stats_label.setObjectName("subtitle")
-        layout.addWidget(self.dashboard_stats_label)
+        form_row.addWidget(QLabel("Water Adjustment Rate (kg per 10mm)"), 1, 0)
+        self.water_adj_rate_input = QLineEdit("2.5")
+        form_row.addWidget(self.water_adj_rate_input, 1, 1)
+        self.water_adj_rate_input.setToolTip(
+            "How much water (kg/m³) to add or remove per 10mm difference between\n"
+            "actual and target slump. Typical value: 2-3 kg per 10mm."
+        )
+        layout.addLayout(form_row)
 
-        recent_label = QLabel("RECENT PROJECTS")
-        recent_label.setObjectName("sectionLabel")
-        layout.addWidget(recent_label)
+        self.trial_btn = QPushButton("🔧  Compute Trial Adjustment")
+        self.trial_btn.setObjectName("trialBtn")
+        self.trial_btn.clicked.connect(self.on_trial_adjust)
+        layout.addWidget(self.trial_btn)
 
-        self.dashboard_recent_list = QListWidget()
-        self.dashboard_recent_list.itemDoubleClicked.connect(self.on_dashboard_load_project)
-        layout.addWidget(self.dashboard_recent_list)
+        self.trial_table = self.make_result_table()
+        layout.addWidget(self.trial_table)
 
-        hint = QLabel("Double-click a project to load it instantly.")
-        hint.setObjectName("subtitle")
-        layout.addWidget(hint)
-
-        layout.addStretch()
         return tab
 
-    def refresh_dashboard(self):
-        count = get_project_count()
-        self.dashboard_stats_label.setText(f"You have {count} saved project(s).")
+    def make_result_table(self):
+        table = QTableWidget()
+        table.setColumnCount(2)
+        table.setHorizontalHeaderLabels(["Parameter", "Value"])
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        return table
 
-        self.dashboard_recent_list.clear()
-        recent_rows = get_all_projects()[:5]
-        for project_id, name, created_at in recent_rows:
-            item = QListWidgetItem(f"{name}    ({created_at})")
-            item.setData(Qt.UserRole, project_id)
-            self.dashboard_recent_list.addItem(item)
+    # ================= SAVED PROJECTS PAGE =================
 
-    def on_dashboard_load_project(self, item):
-        project_id = item.data(Qt.UserRole)
-        inputs, results = get_project(project_id)
-        if inputs is None:
-            QMessageBox.warning(self, "Error", "Failed to load the project.")
-            return
+    def build_projects_page(self):
+        page = QFrame()
+        page.setObjectName("card")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
 
-        self.set_inputs(inputs)
-        self.last_result = results["mix"]
-        self.last_batch_info = results["batch"]
-        self.last_cost_info = results.get("cost", {
-            "cement_cost": 0, "fine_cost": 0, "coarse_cost": 0,
-            "water_cost": 0, "total_cost": 0, "cost_per_m3": 0
-        })
-        self.last_trial_result = None
-        self.populate_results(results["mix"], results["batch"], self.last_cost_info)
-        self.tabs.setCurrentWidget(self.field_table)
-
-        QMessageBox.information(self, "Loaded", "Project loaded successfully — view the results in the other tabs.")
-
-    def build_projects_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+        title = QLabel("Saved Projects")
+        title.setObjectName("title")
+        layout.addWidget(title)
 
         search_row = QHBoxLayout()
         self.search_input = QLineEdit()
@@ -459,16 +607,9 @@ class MixDesignApp(QWidget):
         btn_row.addWidget(self.delete_btn)
 
         layout.addLayout(btn_row)
-        return tab
+        return page
 
-    def make_result_table(self):
-        table = QTableWidget()
-        table.setColumnCount(2)
-        table.setHorizontalHeaderLabels(["Parameter", "Value"])
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        table.verticalHeader().setVisible(False)
-        table.setEditTriggers(QTableWidget.NoEditTriggers)
-        return table
+    # ================= DATA / INPUT HELPERS =================
 
     def get_current_inputs(self):
         return {
@@ -511,6 +652,8 @@ class MixDesignApp(QWidget):
         self.fine_rate_input.setText(str(inputs.get("fine_rate", "0")))
         self.coarse_rate_input.setText(str(inputs.get("coarse_rate", "0")))
         self.water_rate_input.setText(str(inputs.get("water_rate", "0")))
+
+    # ================= CALCULATE / RESULTS =================
 
     def on_calculate(self):
         self.error_label.setText("")
@@ -580,6 +723,9 @@ class MixDesignApp(QWidget):
         self.calc_btn.setEnabled(True)
         self.calc_btn.setText("🧮  Calculate Mix Design")
 
+        self.show_page(2)
+        self.tabs.setCurrentIndex(0)
+
     def on_trial_adjust(self):
         if self.last_result is None:
             QMessageBox.warning(self, "Calculate First", "Please calculate the mix design first.")
@@ -590,7 +736,7 @@ class MixDesignApp(QWidget):
             target_slump = float(self.slump_input.text())
             adjustment_rate = float(self.water_adj_rate_input.text() or 2.5)
         except ValueError:
-            self.error_label.setText("Please enter a valid actual slump value.")
+            QMessageBox.warning(self, "Invalid Input", "Please enter a valid actual slump value.")
             return
 
         trial_result = adjust_trial_mix(self.last_result, actual_slump, target_slump, adjustment_rate)
@@ -607,7 +753,6 @@ class MixDesignApp(QWidget):
             ("Cement Change", f'{trial_result["cement_change"]} kg/m³'),
         ]
         self.fill_table(self.trial_table, trial_rows)
-        self.tabs.setCurrentWidget(self.trial_table)
 
     def populate_results(self, result, batch_info, cost_info):
         common_rows = [
@@ -682,6 +827,8 @@ class MixDesignApp(QWidget):
             table.setItem(i, 0, QTableWidgetItem(str(label)))
             table.setItem(i, 1, QTableWidgetItem(str(value)))
 
+    # ================= SAVE / EXPORT =================
+
     def on_save_project(self):
         name = self.project_name_input.text().strip()
         if not name:
@@ -731,12 +878,7 @@ class MixDesignApp(QWidget):
             wc_path = os.path.join(temp_dir, "mix_wc_chart.png")
             self.charts_widget.save_charts_as_images(pie_path, bar_path, compare_path, wc_path)
 
-            chart_paths = {
-                "pie": pie_path,
-                "bar": bar_path,
-                "compare": compare_path,
-                "wc": wc_path,
-            }
+            chart_paths = {"pie": pie_path, "bar": bar_path, "compare": compare_path, "wc": wc_path}
 
             generate_pdf_report(
                 file_path,
@@ -754,7 +896,7 @@ class MixDesignApp(QWidget):
             QMessageBox.critical(self, "Export Failed", f"Could not generate PDF:\n{str(e)}")
         finally:
             self.pdf_btn.setEnabled(True)
-            self.pdf_btn.setText("📄  Export PDF Report")
+            self.pdf_btn.setText("📄  Export PDF")
 
     def on_export_excel(self):
         if self.last_result is None:
@@ -792,6 +934,8 @@ class MixDesignApp(QWidget):
             self.excel_btn.setEnabled(True)
             self.excel_btn.setText("📊  Export Excel")
 
+    # ================= SAVED PROJECTS =================
+
     def refresh_projects_list(self, keyword=None):
         self.projects_list.clear()
         rows = search_projects(keyword) if keyword else get_all_projects()
@@ -824,8 +968,8 @@ class MixDesignApp(QWidget):
         })
         self.last_trial_result = None
         self.populate_results(results["mix"], results["batch"], self.last_cost_info)
-
-        QMessageBox.information(self, "Loaded", "Project loaded successfully — view the results in the other tabs.")
+        self.show_page(2)
+        self.tabs.setCurrentWidget(self.field_table)
 
     def on_delete_project(self):
         selected = self.projects_list.currentItem()
@@ -843,6 +987,8 @@ class MixDesignApp(QWidget):
             self.refresh_projects_list()
             self.refresh_dashboard()
 
+    # ================= STYLING =================
+
     def apply_styles(self):
         self.setStyleSheet(self.get_theme_stylesheet(self.current_theme))
 
@@ -850,6 +996,7 @@ class MixDesignApp(QWidget):
         if theme == "light":
             bg_main = "#f4f6fa"
             bg_card = "#ffffff"
+            bg_sidebar = "#eef1f7"
             border_color = "#d8dde6"
             text_main = "#1e2530"
             text_muted = "#6b7280"
@@ -861,6 +1008,7 @@ class MixDesignApp(QWidget):
         else:
             bg_main = "#1a1f2b"
             bg_card = "#242b3a"
+            bg_sidebar = "#161b26"
             border_color = "#313b52"
             text_main = "#e6e9ef"
             text_muted = "#8b94a8"
@@ -877,9 +1025,31 @@ class MixDesignApp(QWidget):
                 font-size: 13px;
                 color: {text_main};
             }}
-            #formScroll {{
+            #sidebar {{
+                background-color: {bg_sidebar};
+                border-right: 1px solid {border_color};
+            }}
+            #sidebarLogo {{
+                font-size: 15px;
+                font-weight: 700;
+                color: {text_main};
+            }}
+            #sidebarBtn {{
+                background-color: transparent;
+                color: {text_muted};
                 border: none;
-                background: transparent;
+                border-radius: 8px;
+                padding: 10px 12px;
+                text-align: left;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            #sidebarBtn:hover {{
+                background-color: {border_color};
+            }}
+            #sidebarBtn:checked {{
+                background-color: #4f8cff;
+                color: white;
             }}
             #card {{
                 background-color: {bg_card};
@@ -954,13 +1124,20 @@ class MixDesignApp(QWidget):
                 padding: 13px;
                 border-radius: 10px;
                 border: none;
-                margin-top: 12px;
             }}
             #calcBtn:hover {{
                 background-color: #3d76e0;
             }}
-            #calcBtn:pressed {{
-                background-color: #2e5fc4;
+            #wizardNavBtn {{
+                background-color: {bg_card};
+                color: {text_main};
+                border: 1.5px solid {border_color};
+                font-weight: 600;
+                padding: 10px 18px;
+                border-radius: 8px;
+            }}
+            #wizardNavBtn:hover {{
+                background-color: {border_color};
             }}
             #trialBtn {{
                 background-color: #9b59b6;
@@ -1018,12 +1195,13 @@ class MixDesignApp(QWidget):
                 background-color: #c0392b;
             }}
             #themeBtn {{
-                background-color: {bg_card};
-                color: {text_main};
+                background-color: transparent;
+                color: {text_muted};
                 border: 1.5px solid {border_color};
                 font-weight: 600;
-                padding: 8px 14px;
+                padding: 8px 10px;
                 border-radius: 8px;
+                font-size: 11px;
             }}
             #themeBtn:hover {{
                 background-color: {border_color};
