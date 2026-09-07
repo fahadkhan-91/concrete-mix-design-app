@@ -376,6 +376,20 @@ class MixDesignApp(QWidget):
         self.bag_weight_input.setToolTip(
             "Standard weight of one cement bag (kg). Commonly 50kg."
         )
+        admixture_label = QLabel("Admixture (Optional)")
+        admixture_label.setObjectName("sectionLabel")
+        step_layout.addWidget(admixture_label)
+
+        admixture_grid = QGridLayout()
+        admixture_grid.addWidget(QLabel("Water Reduction (%)"), 0, 0)
+        self.admixture_input = QLineEdit("0")
+        admixture_grid.addWidget(self.admixture_input, 0, 1)
+        self.admixture_input.setToolTip(
+            "If using a superplasticizer or water-reducing admixture, enter the percentage\n"
+            "by which it reduces water demand (typically 5-25% depending on dosage and type).\n"
+            "Leave at 0 if not using any admixture."
+        )
+        step_layout.addLayout(admixture_grid)
 
         step_layout.addLayout(batch_grid)
         step_layout.addStretch()
