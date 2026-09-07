@@ -78,7 +78,8 @@ def get_coarse_fraction(max_agg_size, zone, wc_ratio):
 
 def calculate_mix(fck, slump, max_agg_size, exposure, zone,
                    fine_moisture=0.0, fine_absorption=0.0,
-                   coarse_moisture=0.0, coarse_absorption=0.0):
+                   coarse_moisture=0.0, coarse_absorption=0.0,
+                   admixture_reduction=0.0):
 
     # target mean strength - informational, IS 10262 durability governs w/c here
     # since strength-vs-wc curve needs actual material test data
@@ -87,7 +88,7 @@ def calculate_mix(fck, slump, max_agg_size, exposure, zone,
 
     # water content from table + slump correction
     water = get_water_content(slump, max_agg_size)
-
+    water = water * (1 - admixture_reduction / 100)
     # w/c ratio - durability limit governs (no lab strength-wc curve available here)
     wc_final = exposure_wc_limit[exposure]
 
