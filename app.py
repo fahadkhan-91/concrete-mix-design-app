@@ -645,6 +645,7 @@ class MixDesignApp(QWidget):
             "fine_rate": self.fine_rate_input.text(),
             "coarse_rate": self.coarse_rate_input.text(),
             "water_rate": self.water_rate_input.text(),
+            "admixture_reduction": self.admixture_input.text(),
         }
 
     def set_inputs(self, inputs):
@@ -666,7 +667,7 @@ class MixDesignApp(QWidget):
         self.fine_rate_input.setText(str(inputs.get("fine_rate", "0")))
         self.coarse_rate_input.setText(str(inputs.get("coarse_rate", "0")))
         self.water_rate_input.setText(str(inputs.get("water_rate", "0")))
-
+        self.admixture_input.setText(str(inputs.get("admixture_reduction", "0")))
     # ================= CALCULATE / RESULTS =================
 
     def on_calculate(self):
@@ -696,6 +697,7 @@ class MixDesignApp(QWidget):
             fine_rate = float(self.fine_rate_input.text() or 0)
             coarse_rate = float(self.coarse_rate_input.text() or 0)
             water_rate = float(self.water_rate_input.text() or 0)
+            admixture_reduction = float(self.admixture_input.text() or 0)
         except ValueError:
             self.error_label.setText("Please fill all fields correctly — numeric values only.")
             self.calc_btn.setEnabled(True)
@@ -709,19 +711,22 @@ class MixDesignApp(QWidget):
             result = calculate_mix_aci(
                 fck, slump, max_agg_size, aci_exposure, fm_sand,
                 fine_moisture, fine_absorption,
-                coarse_moisture, coarse_absorption
+                coarse_moisture, coarse_absorption,
+                admixture_reduction
             )
         elif "BS" in method:
             result = calculate_mix_bs(
                 fck, slump, max_agg_size, exposure, zone, aggregate_type,
                 fine_moisture, fine_absorption,
-                coarse_moisture, coarse_absorption
+                coarse_moisture, coarse_absorption,
+                admixture_reduction
             )
         else:
             result = calculate_mix_is(
                 fck, slump, max_agg_size, exposure, zone,
                 fine_moisture, fine_absorption,
-                coarse_moisture, coarse_absorption
+                coarse_moisture, coarse_absorption,
+                admixture_reduction
             )
 
         self.last_result = result
