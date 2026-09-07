@@ -70,14 +70,16 @@ def get_coarse_fraction(max_size, fm):
 
 def calculate_mix(fck, slump, max_agg_size, exposure, fm_sand,
                    fine_moisture=0.0, fine_absorption=0.0,
-                   coarse_moisture=0.0, coarse_absorption=0.0):
+                   coarse_moisture=0.0, coarse_absorption=0.0,
+                   admixture_reduction=0.0):
     category = slump_category(slump)
 
     if exposure in ("moderate", "severe"):
         water = water_table_air[category][max_agg_size]
     else:
         water = water_table[category][max_agg_size]
-
+    # admixture (superplasticizer/water-reducer) se water content kam ho jata hai
+    water = water * (1 - admixture_reduction / 100)
     wc_strength = get_wc_ratio(fck)
     wc_limit = exposure_wc_limit[exposure]
     wc_final = min(wc_strength, wc_limit)
