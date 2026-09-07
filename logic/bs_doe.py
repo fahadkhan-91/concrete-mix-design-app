@@ -103,14 +103,15 @@ def get_wc_from_strength(target_strength):
 
 def calculate_mix(fck, slump, max_agg_size, exposure, zone, aggregate_type,
                    fine_moisture=0.0, fine_absorption=0.0,
-                   coarse_moisture=0.0, coarse_absorption=0.0):
+                   coarse_moisture=0.0, coarse_absorption=0.0,
+                   admixture_reduction=0.0):
 
     std_dev = get_std_deviation(fck)
     target_mean_strength = fck + 1.64 * std_dev
 
     # free water content, adjusted for aggregate shape
     water = get_water_content(slump, max_agg_size, aggregate_type)
-
+    water = water * (1 - admixture_reduction / 100)
     # free w/c ratio - stricter (lower) of strength-based curve and durability limit
     wc_strength = get_wc_from_strength(target_mean_strength)
     wc_limit = exposure_wc_limit[exposure]
