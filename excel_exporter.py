@@ -17,7 +17,7 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
     # ---------- Sheet 1: Summary/Inputs ----------
     ws = wb.active
     ws.title = "Input Summary"
-    _write_header(ws, "Concrete Mix Design Report", project_name, method_name)
+    _write_header(ws, "Concrete Mix Design Report", project_name, method_name, company_name, company_address)
 
     row = 4
     row = _write_section(ws, row, "Design Parameters", [
@@ -64,7 +64,7 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
 
     # ---------- Sheet 2: Mix Design Results ----------
     ws2 = wb.create_sheet("Mix Design Results")
-    _write_header(ws2, "Mix Design Results", project_name, method_name)
+    _write_header(ws2, "Mix Design Results", project_name, method_name, company_name, company_address)
 
     row = 4
     ratio_rows = []
@@ -104,7 +104,7 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
 
     # ---------- Sheet 3: Site Batching & Cost ----------
     ws3 = wb.create_sheet("Site Batching & Cost")
-    _write_header(ws3, "Site Batching & Cost Estimation", project_name, method_name)
+    _write_header(ws3, "Site Batching & Cost Estimation", project_name, method_name, company_name, company_address)
 
     row = 4
     row = _write_section(ws3, row, "Site Batching", [
@@ -137,7 +137,7 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
     # ---------- Sheet 4: Trial Mix Adjustment (agar computed ho) ----------
     if trial_result:
         ws4 = wb.create_sheet("Trial Mix Adjustment")
-        _write_header(ws4, "Trial Mix Adjustment", project_name, method_name)
+        _write_header(ws4, "Trial Mix Adjustment", project_name, method_name, company_name, company_address)
 
         row = 4
         _write_section(ws4, row, "Trial Adjustment", [
@@ -155,15 +155,24 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
     wb.save(file_path)
 
 
-def _write_header(ws, title, project_name, method_name):
-    ws["A1"] = title
-    ws["A1"].font = TITLE_FONT
+def _write_header(ws, title, project_name, method_name, company_name="", company_address=""):
+    row = 1
+    if company_name:
+        ws.cell(row=row, column=1, value=company_name).font = TITLE_FONT
+        row += 1
+        if company_address:
+            ws.cell(row=row, column=1, value=company_address).font = SUBTITLE_FONT
+            row += 1
 
-    ws["A2"] = f"Project: {project_name or 'Untitled'}"
-    ws["A2"].font = SUBTITLE_FONT
+    ws.cell(row=row, column=1, value=title).font = Font(bold=True, size=13)
+    row += 1
 
-    ws["A3"] = f"Method: {method_name}  |  Generated: {datetime.now().strftime('%d %b %Y, %I:%M %p')}"
-    ws["A3"].font = SUBTITLE_FONT
+    ws.cell(row=row, column=1, value=f"Project: {project_name or 'Untitled'}").font = SUBTITLE_FONT
+    row += 1
+
+    ws.cell(row=row, column=1,
+            value=f"Method: {method_name}  |  Generated: {datetime.now().strftime('%d %b %Y, %I:%M %p')}"
+            ).font = SUBTITLE_FONT
 
 
 def _write_section(ws, start_row, title, rows, no_title=False):
