@@ -6,6 +6,13 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QMessageBox, QScrollArea, QFileDialog, QSplashScreen,
     QStackedWidget
 )
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QLabel, QLineEdit, QComboBox, QPushButton, QTableWidget,
+    QTableWidgetItem, QFrame, QHeaderView, QTabWidget, QListWidget,
+    QListWidgetItem, QMessageBox, QScrollArea, QFileDialog, QSplashScreen,
+    QStackedWidget
+)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont, QColor
 
