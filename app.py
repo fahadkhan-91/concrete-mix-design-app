@@ -603,6 +603,10 @@ class MixDesignApp(QWidget):
         title.setObjectName("title")
         layout.addWidget(title)
 
+        hint = QLabel("Select 2-3 projects (Ctrl+Click) to compare them side by side.")
+        hint.setObjectName("subtitle")
+        layout.addWidget(hint)
+
         search_row = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search projects...")
@@ -611,12 +615,18 @@ class MixDesignApp(QWidget):
         layout.addLayout(search_row)
 
         self.projects_list = QListWidget()
+        self.projects_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         layout.addWidget(self.projects_list)
 
         btn_row = QHBoxLayout()
         self.load_btn = QPushButton("Load Selected")
         self.load_btn.clicked.connect(self.on_load_project)
         btn_row.addWidget(self.load_btn)
+
+        self.compare_btn = QPushButton("⚖️  Compare Selected")
+        self.compare_btn.setObjectName("wizardNavBtn")
+        self.compare_btn.clicked.connect(self.on_compare_projects)
+        btn_row.addWidget(self.compare_btn)
 
         self.delete_btn = QPushButton("Delete Selected")
         self.delete_btn.setObjectName("deleteBtn")
