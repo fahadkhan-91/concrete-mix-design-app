@@ -33,7 +33,14 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
     elements = []
 
     # ---------- Header ----------
-    elements.append(Paragraph("Concrete Mix Design Report", title_style))
+    if company_name:
+        elements.append(Paragraph(company_name, title_style))
+        if company_address:
+            elements.append(Paragraph(company_address, subtitle_style))
+        elements.append(Paragraph("Concrete Mix Design Report", subsection_style))
+    else:
+        elements.append(Paragraph("Concrete Mix Design Report", title_style))
+
     elements.append(Paragraph(f"Project: {project_name or 'Untitled'}", subtitle_style))
     elements.append(Paragraph(
         f"Method: {method_name} &nbsp;&nbsp;|&nbsp;&nbsp; Generated: {datetime.now().strftime('%d %b %Y, %I:%M %p')}",
