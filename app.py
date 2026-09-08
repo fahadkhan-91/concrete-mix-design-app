@@ -636,6 +636,83 @@ class MixDesignApp(QWidget):
         layout.addLayout(btn_row)
         return page
 
+        def build_comparison_page(self):
+        page = QFrame()
+        page.setObjectName("card")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
+
+        top_row = QHBoxLayout()
+        title = QLabel("Project Comparison")
+        title.setObjectName("title")
+        top_row.addWidget(title)
+        top_row.addStretch()
+
+        back_btn = QPushButton("← Back to Saved Projects")
+        back_btn.setObjectName("wizardNavBtn")
+        back_btn.clicked.connect(lambda: self.show_page(3))
+        top_row.addWidget(back_btn)
+        layout.addLayout(top_row)
+
+        self.comparison_table = QTableWidget()
+        self.comparison_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.comparison_table.verticalHeader().setVisible(False)
+        self.comparison_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        layout.addWidget(self.comparison_table)
+
+        return page
+
+    def on_compare_projects(self):
+        selected_items = self.projects_list.selectedItems()
+
+        if len(selected_items) < 2:
+            QMessageBox.warning(self, "Select More Projects", "Please select at least 2 projects to compare (Ctrl+Click).")
+            return
+        if len(selected_items) > 3:
+            QMessageBox.warning(self, "Too Many Selected", "Please select a maximum of 3 projects to compare.")
+            return
+
+        project_names = []
+        project_data = []
+
+        for item in selected_items:
+            project_id = item.data(Qt.UserRole)
+            inputs, results = get_project(project_id)
+            if inputs is None:
+                continue
+            project_names.append(inputs.get("method", "") + " — " + item.text().split("    (")[0])
+            project_data.append((inputs, results))
+
+        metric_rows = [
+            ("Design Method", lambda i, r: i.get("method", "")),
+            ("Target Strength (f'ck)", lambda i, r: f"{i.get('fck', '')} MPa"),
+            ("Slump", lambda i, r: f"{i.get('slump', '')} mm"),
+            ("Exposure Condition", lambda i, r: i.get("exposure", "").replace("_", " ").capitalize()),
+            ("Final W/C Ratio", lambda i, r: r["mix"]["wc_final"]),
+            ("Cement (field, kg/m³)", lambda i, r: r["mix"]["cement_field"]),
+            ("Water (field, kg/m³)", lambda i, r: r["mix"]["water_field"]),
+            ("Fine Aggregate (field, kg/m³)", lambda i, r: r["mix"]["fine_field"]),
+            ("Coarse Aggregate (field, kg/m³)", lambda i, r: r["mix"]["coarse_field"]),
+            ("Total Cement Bags", lambda i, r: r["batch"]["total_bags"]),
+            ("Total Cost", lambda i, r: r.get("cost", {}).get("total_cost", "N/A")),
+            ("Cost per m³", lambda i, r: r.get("cost", {}).get("cost_per_m3", "N/A")),
+        ]
+
+        self.comparison_table.setColumnCount(len(project_names) + 1)
+        self.comparison_table.setHorizontalHeaderLabels(["Metric"] + project_names)
+        self.comparison_table.setRowCount(len(metric_rows))
+
+        for row_idx, (label, extractor) in enumerate(metric_rows):
+            self.comparison_table.setItem(row_idx, 0, QTableWidgetItem(label))
+            for col_idx, (inputs, results) in enumerate(project_data):
+                try:
+                    value = extractor(inputs, results)
+                except Exception:
+                    value = "N/A"
+                self.comparison_table.setItem(row_idx, col_idx + 1, QTableWidgetItem(str(value)))
+
+        self.show_page(4)
+
     # ================= DATA / INPUT HELPERS =================
 
     def get_current_inputs(self):
