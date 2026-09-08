@@ -72,11 +72,13 @@ class MixDesignApp(QWidget):
         self.wizard_page = self.build_wizard_page()
         self.results_page = self.build_results_page()
         self.projects_page = self.build_projects_page()
+        self.comparison_page = self.build_comparison_page()
 
         self.content_stack.addWidget(self.dashboard_page)   # index 0
         self.content_stack.addWidget(self.wizard_page)       # index 1
         self.content_stack.addWidget(self.results_page)      # index 2
         self.content_stack.addWidget(self.projects_page)     # index 3
+        self.content_stack.addWidget(self.comparison_page)   # index 4
 
         main_layout.addWidget(content_wrapper, 1)
 
