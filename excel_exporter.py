@@ -10,7 +10,8 @@ SUBTITLE_FONT = Font(italic=True, size=9, color="808080")
 
 
 def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
-                         cost_info, trial_result=None, method_name="ACI 211.1"):
+                         cost_info, trial_result=None, method_name="ACI 211.1",
+                         company_name="", company_address=""):
     wb = openpyxl.Workbook()
 
     # ---------- Sheet 1: Summary/Inputs ----------
