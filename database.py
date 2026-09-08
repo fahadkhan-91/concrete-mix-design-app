@@ -19,6 +19,7 @@ def init_db():
         )
     """)
     conn.commit()
+    init_settings_table()
     conn.close()
 
 
