@@ -10,7 +10,7 @@ from datetime import datetime
 
 def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
                          cost_info, chart_image_paths=None, trial_result=None,
-                         method_name="ACI 211.1"):
+                         method_name="ACI 211.1", company_name="", company_address=""):
     doc = SimpleDocTemplate(file_path, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
 
