@@ -18,7 +18,7 @@ from logic.is10262 import calculate_mix as calculate_mix_is
 from logic.bs_doe import calculate_mix as calculate_mix_bs
 from database import (
     init_db, save_project, get_all_projects, get_project, delete_project,
-    search_projects, get_project_count
+    search_projects, get_project_count, save_setting, get_setting
 )
 from report_generator import generate_pdf_report
 from excel_exporter import export_excel_report
@@ -74,11 +74,14 @@ class MixDesignApp(QWidget):
         self.projects_page = self.build_projects_page()
         self.comparison_page = self.build_comparison_page()
 
+        self.settings_page = self.build_settings_page()
+
         self.content_stack.addWidget(self.dashboard_page)   # index 0
         self.content_stack.addWidget(self.wizard_page)       # index 1
         self.content_stack.addWidget(self.results_page)      # index 2
         self.content_stack.addWidget(self.projects_page)     # index 3
         self.content_stack.addWidget(self.comparison_page)   # index 4
+        self.content_stack.addWidget(self.settings_page)     # index 5
 
         main_layout.addWidget(content_wrapper, 1)
 
@@ -104,6 +107,7 @@ class MixDesignApp(QWidget):
             ("🏠  Dashboard", 0),
             ("🧮  New Design", 1),
             ("📁  Saved Projects", 3),
+            ("⚙️  Settings", 5),
         ]
         for label, page_index in nav_items:
             btn = QPushButton(label)
@@ -636,7 +640,7 @@ class MixDesignApp(QWidget):
         layout.addLayout(btn_row)
         return page
 
-        def build_comparison_page(self):
+    def build_comparison_page(self):
         page = QFrame()
         page.setObjectName("card")
         layout = QVBoxLayout(page)
@@ -713,6 +717,53 @@ class MixDesignApp(QWidget):
 
         self.show_page(4)
 
+    def build_settings_page(self):
+        page = QFrame()
+        page.setObjectName("card")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
+
+        title = QLabel("Settings")
+        title.setObjectName("title")
+        layout.addWidget(title)
+
+        branding_label = QLabel("Report Branding (optional)")
+        branding_label.setObjectName("sectionLabel")
+        layout.addWidget(branding_label)
+
+        hint = QLabel("If set, this appears as a letterhead at the top of every PDF and Excel report.")
+        hint.setObjectName("subtitle")
+        layout.addWidget(hint)
+
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Company / Firm Name"), 0, 0)
+        self.company_name_input = QLineEdit()
+        self.company_name_input.setPlaceholderText("e.g. ABC Consulting Engineers")
+        grid.addWidget(self.company_name_input, 0, 1)
+
+        grid.addWidget(QLabel("Address / Contact Line"), 1, 0)
+        self.company_address_input = QLineEdit()
+        self.company_address_input.setPlaceholderText("e.g. Lahore, Pakistan | +92-xxx-xxxxxxx")
+        grid.addWidget(self.company_address_input, 1, 1)
+
+        layout.addLayout(grid)
+
+        save_settings_btn = QPushButton("💾  Save Settings")
+        save_settings_btn.setObjectName("saveBtn")
+        save_settings_btn.clicked.connect(self.on_save_settings)
+        layout.addWidget(save_settings_btn)
+
+        layout.addStretch()
+
+        self.company_name_input.setText(get_setting("company_name", ""))
+        self.company_address_input.setText(get_setting("company_address", ""))
+
+        return page
+
+    def on_save_settings(self):
+        save_setting("company_name", self.company_name_input.text().strip())
+        save_setting("company_address", self.company_address_input.text().strip())
+        QMessageBox.information(self, "Saved", "Settings have been saved.")
     # ================= DATA / INPUT HELPERS =================
 
     def get_current_inputs(self):
@@ -998,7 +1049,10 @@ class MixDesignApp(QWidget):
                 self.last_cost_info,
                 chart_image_paths=chart_paths,
                 trial_result=self.last_trial_result,
-                method_name=inputs["method"]
+                method_name=inputs["method"],
+                method_name=inputs["method"],
+                company_name=get_setting("company_name", ""),
+                company_address=get_setting("company_address", "")
             )
             QMessageBox.information(self, "Exported", f"PDF report saved to:\n{file_path}")
         except Exception as e:
@@ -1034,7 +1088,10 @@ class MixDesignApp(QWidget):
                 self.last_batch_info,
                 self.last_cost_info,
                 trial_result=self.last_trial_result,
-                method_name=inputs["method"]
+                method_name=inputs["method"],
+                method_name=inputs["method"],
+                company_name=get_setting("company_name", ""),
+                company_address=get_setting("company_address", "")
             )
             QMessageBox.information(self, "Exported", f"Excel report saved to:\n{file_path}")
         except Exception as e:
