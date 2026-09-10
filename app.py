@@ -1,5 +1,4 @@
 import sys
-
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QTableWidget,
@@ -23,6 +22,7 @@ from database import (
 from report_generator import generate_pdf_report
 from excel_exporter import export_excel_report
 from charts_widget import ChartsWidget
+from units import kgm3_to_lbyd3, kg_to_lb, m3_to_yd3
 
 
 WIZARD_STEP_TITLES = [
@@ -73,7 +73,6 @@ class MixDesignApp(QWidget):
         self.results_page = self.build_results_page()
         self.projects_page = self.build_projects_page()
         self.comparison_page = self.build_comparison_page()
-
         self.settings_page = self.build_settings_page()
 
         self.content_stack.addWidget(self.dashboard_page)   # index 0
@@ -362,6 +361,21 @@ class MixDesignApp(QWidget):
 
         step_layout.addLayout(moisture_grid)
 
+        admixture_label = QLabel("Admixture (Optional)")
+        admixture_label.setObjectName("sectionLabel")
+        step_layout.addWidget(admixture_label)
+
+        admixture_grid = QGridLayout()
+        admixture_grid.addWidget(QLabel("Water Reduction (%)"), 0, 0)
+        self.admixture_input = QLineEdit("0")
+        admixture_grid.addWidget(self.admixture_input, 0, 1)
+        self.admixture_input.setToolTip(
+            "If using a superplasticizer or water-reducing admixture, enter the percentage\n"
+            "by which it reduces water demand (typically 5-25% depending on dosage and type).\n"
+            "Leave at 0 if not using any admixture."
+        )
+        step_layout.addLayout(admixture_grid)
+
         batch_label = QLabel("Batch / Site Quantity")
         batch_label.setObjectName("sectionLabel")
         step_layout.addWidget(batch_label)
@@ -383,20 +397,6 @@ class MixDesignApp(QWidget):
         self.bag_weight_input.setToolTip(
             "Standard weight of one cement bag (kg). Commonly 50kg."
         )
-        admixture_label = QLabel("Admixture (Optional)")
-        admixture_label.setObjectName("sectionLabel")
-        step_layout.addWidget(admixture_label)
-
-        admixture_grid = QGridLayout()
-        admixture_grid.addWidget(QLabel("Water Reduction (%)"), 0, 0)
-        self.admixture_input = QLineEdit("0")
-        admixture_grid.addWidget(self.admixture_input, 0, 1)
-        self.admixture_input.setToolTip(
-            "If using a superplasticizer or water-reducing admixture, enter the percentage\n"
-            "by which it reduces water demand (typically 5-25% depending on dosage and type).\n"
-            "Leave at 0 if not using any admixture."
-        )
-        step_layout.addLayout(admixture_grid)
 
         step_layout.addLayout(batch_grid)
         step_layout.addStretch()
@@ -640,6 +640,8 @@ class MixDesignApp(QWidget):
         layout.addLayout(btn_row)
         return page
 
+    # ================= COMPARISON PAGE =================
+
     def build_comparison_page(self):
         page = QFrame()
         page.setObjectName("card")
@@ -717,6 +719,8 @@ class MixDesignApp(QWidget):
 
         self.show_page(4)
 
+    # ================= SETTINGS PAGE =================
+
     def build_settings_page(self):
         page = QFrame()
         page.setObjectName("card")
@@ -748,6 +752,18 @@ class MixDesignApp(QWidget):
 
         layout.addLayout(grid)
 
+        units_label = QLabel("Unit System")
+        units_label.setObjectName("sectionLabel")
+        layout.addWidget(units_label)
+
+        self.unit_system_combo = QComboBox()
+        self.unit_system_combo.addItems(["Metric (kg, m³)", "Imperial (lb, yd³)"])
+        self.unit_system_combo.setToolTip(
+            "Choose how quantities are displayed in the results tables.\n"
+            "All calculations are always done in metric internally; this only affects display."
+        )
+        layout.addWidget(self.unit_system_combo)
+
         save_settings_btn = QPushButton("💾  Save Settings")
         save_settings_btn.setObjectName("saveBtn")
         save_settings_btn.clicked.connect(self.on_save_settings)
@@ -757,13 +773,22 @@ class MixDesignApp(QWidget):
 
         self.company_name_input.setText(get_setting("company_name", ""))
         self.company_address_input.setText(get_setting("company_address", ""))
+        saved_unit = get_setting("unit_system", "metric")
+        self.unit_system_combo.setCurrentText(
+            "Imperial (lb, yd³)" if saved_unit == "imperial" else "Metric (kg, m³)"
+        )
 
         return page
 
     def on_save_settings(self):
         save_setting("company_name", self.company_name_input.text().strip())
         save_setting("company_address", self.company_address_input.text().strip())
+
+        unit_system = "imperial" if "Imperial" in self.unit_system_combo.currentText() else "metric"
+        save_setting("unit_system", unit_system)
+
         QMessageBox.information(self, "Saved", "Settings have been saved.")
+
     # ================= DATA / INPUT HELPERS =================
 
     def get_current_inputs(self):
@@ -780,13 +805,13 @@ class MixDesignApp(QWidget):
             "fine_absorption": self.fine_absorption_input.text(),
             "coarse_moisture": self.coarse_moisture_input.text(),
             "coarse_absorption": self.coarse_absorption_input.text(),
+            "admixture_reduction": self.admixture_input.text(),
             "volume": self.volume_input.text(),
             "bag_weight": self.bag_weight_input.text(),
             "cement_rate": self.cement_rate_input.text(),
             "fine_rate": self.fine_rate_input.text(),
             "coarse_rate": self.coarse_rate_input.text(),
             "water_rate": self.water_rate_input.text(),
-            "admixture_reduction": self.admixture_input.text(),
         }
 
     def set_inputs(self, inputs):
@@ -802,13 +827,14 @@ class MixDesignApp(QWidget):
         self.fine_absorption_input.setText(str(inputs["fine_absorption"]))
         self.coarse_moisture_input.setText(str(inputs["coarse_moisture"]))
         self.coarse_absorption_input.setText(str(inputs["coarse_absorption"]))
+        self.admixture_input.setText(str(inputs.get("admixture_reduction", "0")))
         self.volume_input.setText(str(inputs["volume"]))
         self.bag_weight_input.setText(str(inputs["bag_weight"]))
         self.cement_rate_input.setText(str(inputs.get("cement_rate", "0")))
         self.fine_rate_input.setText(str(inputs.get("fine_rate", "0")))
         self.coarse_rate_input.setText(str(inputs.get("coarse_rate", "0")))
         self.water_rate_input.setText(str(inputs.get("water_rate", "0")))
-        self.admixture_input.setText(str(inputs.get("admixture_reduction", "0")))
+
     # ================= CALCULATE / RESULTS =================
 
     def on_calculate(self):
@@ -830,6 +856,7 @@ class MixDesignApp(QWidget):
             fine_absorption = float(self.fine_absorption_input.text() or 0)
             coarse_moisture = float(self.coarse_moisture_input.text() or 0)
             coarse_absorption = float(self.coarse_absorption_input.text() or 0)
+            admixture_reduction = float(self.admixture_input.text() or 0)
 
             volume_m3 = float(self.volume_input.text() or 1)
             bag_weight = float(self.bag_weight_input.text() or 50)
@@ -838,7 +865,6 @@ class MixDesignApp(QWidget):
             fine_rate = float(self.fine_rate_input.text() or 0)
             coarse_rate = float(self.coarse_rate_input.text() or 0)
             water_rate = float(self.water_rate_input.text() or 0)
-            admixture_reduction = float(self.admixture_input.text() or 0)
         except ValueError:
             self.error_label.setText("Please fill all fields correctly — numeric values only.")
             self.calc_btn.setEnabled(True)
@@ -915,6 +941,24 @@ class MixDesignApp(QWidget):
         self.fill_table(self.trial_table, trial_rows)
 
     def populate_results(self, result, batch_info, cost_info):
+        unit_system = get_setting("unit_system", "metric")
+        is_imperial = (unit_system == "imperial")
+
+        def qty_label(value):
+            if is_imperial:
+                return f"{kgm3_to_lbyd3(value):.1f} lb/yd³"
+            return f"{value} kg/m³"
+
+        def mass_label(value):
+            if is_imperial:
+                return f"{kg_to_lb(value):.1f} lb"
+            return f"{value} kg"
+
+        def volume_label(value):
+            if is_imperial:
+                return f"{m3_to_yd3(value):.2f} yd³"
+            return f"{value} m³"
+
         common_rows = [
             ("Slump Category", result["slump_category"]),
             ("W/C Ratio (strength-based)", result["wc_strength"]),
@@ -927,33 +971,33 @@ class MixDesignApp(QWidget):
         if "target_mean_strength" in result:
             common_rows.insert(0, ("Target Mean Strength", f'{result["target_mean_strength"]} MPa'))
         if "min_cement_required" in result:
-            common_rows.append(("Minimum Cement Required", f'{result["min_cement_required"]} kg/m³'))
+            common_rows.append(("Minimum Cement Required", qty_label(result["min_cement_required"])))
 
         batch_rows = common_rows + [
-            ("Water (batch)", f'{result["water_batch"]} kg/m³'),
-            ("Cement (batch)", f'{result["cement_batch"]} kg/m³'),
-            ("Fine Aggregate (batch)", f'{result["fine_batch"]} kg/m³'),
-            ("Coarse Aggregate (batch)", f'{result["coarse_batch"]} kg/m³'),
+            ("Water (batch)", qty_label(result["water_batch"])),
+            ("Cement (batch)", qty_label(result["cement_batch"])),
+            ("Fine Aggregate (batch)", qty_label(result["fine_batch"])),
+            ("Coarse Aggregate (batch)", qty_label(result["coarse_batch"])),
         ]
 
         field_rows = common_rows + [
-            ("Water (field, adjusted)", f'{result["water_field"]} kg/m³'),
-            ("Cement (field)", f'{result["cement_field"]} kg/m³'),
-            ("Fine Aggregate (field)", f'{result["fine_field"]} kg/m³'),
-            ("Coarse Aggregate (field)", f'{result["coarse_field"]} kg/m³'),
+            ("Water (field, adjusted)", qty_label(result["water_field"])),
+            ("Cement (field)", qty_label(result["cement_field"])),
+            ("Fine Aggregate (field)", qty_label(result["fine_field"])),
+            ("Coarse Aggregate (field)", qty_label(result["coarse_field"])),
         ]
 
         site_rows = [
             ("Cement Bags per m³", batch_info["bags_per_m3"]),
-            ("Water per Bag", f'{batch_info["water_per_bag"]} kg'),
-            ("Fine Aggregate per Bag", f'{batch_info["fine_per_bag"]} kg'),
-            ("Coarse Aggregate per Bag", f'{batch_info["coarse_per_bag"]} kg'),
-            ("— Total for Requested Volume —", f'{batch_info["volume_m3"]} m³'),
+            ("Water per Bag", mass_label(batch_info["water_per_bag"])),
+            ("Fine Aggregate per Bag", mass_label(batch_info["fine_per_bag"])),
+            ("Coarse Aggregate per Bag", mass_label(batch_info["coarse_per_bag"])),
+            ("— Total for Requested Volume —", volume_label(batch_info["volume_m3"])),
             ("Total Cement Bags", batch_info["total_bags"]),
-            ("Total Cement", f'{batch_info["total_cement_kg"]} kg'),
-            ("Total Water", f'{batch_info["total_water_kg"]} kg'),
-            ("Total Fine Aggregate", f'{batch_info["total_fine_kg"]} kg'),
-            ("Total Coarse Aggregate", f'{batch_info["total_coarse_kg"]} kg'),
+            ("Total Cement", mass_label(batch_info["total_cement_kg"])),
+            ("Total Water", mass_label(batch_info["total_water_kg"])),
+            ("Total Fine Aggregate", mass_label(batch_info["total_fine_kg"])),
+            ("Total Coarse Aggregate", mass_label(batch_info["total_coarse_kg"])),
         ]
 
         cost_rows = [
@@ -1050,7 +1094,6 @@ class MixDesignApp(QWidget):
                 chart_image_paths=chart_paths,
                 trial_result=self.last_trial_result,
                 method_name=inputs["method"],
-                method_name=inputs["method"],
                 company_name=get_setting("company_name", ""),
                 company_address=get_setting("company_address", "")
             )
@@ -1088,7 +1131,6 @@ class MixDesignApp(QWidget):
                 self.last_batch_info,
                 self.last_cost_info,
                 trial_result=self.last_trial_result,
-                method_name=inputs["method"],
                 method_name=inputs["method"],
                 company_name=get_setting("company_name", ""),
                 company_address=get_setting("company_address", "")
