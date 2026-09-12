@@ -19,7 +19,7 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
     ws.title = "Input Summary"
     _write_header(ws, "Concrete Mix Design Report", project_name, method_name, company_name, company_address)
 
-    row = 4
+    row = 6 if company_name else 4
     row = _write_section(ws, row, "Design Parameters", [
         ("Target Strength (f'ck)", f"{inputs['fck']} MPa"),
         ("Slump", f"{inputs['slump']} mm"),
@@ -44,6 +44,12 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
         ("Coarse Aggregate Absorption", f"{inputs.get('coarse_absorption', 0)}%"),
     ])
 
+    if float(inputs.get('admixture_reduction', 0) or 0) > 0:
+        row += 1
+        row = _write_section(ws, row, "Admixture", [
+            ("Water Reduction (Admixture)", f"{inputs.get('admixture_reduction', 0)}%"),
+        ])
+
     row += 1
     row = _write_section(ws, row, "Batch / Site Settings", [
         ("Total Volume Required", f"{inputs.get('volume', 1)} m³"),
@@ -66,7 +72,7 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
     ws2 = wb.create_sheet("Mix Design Results")
     _write_header(ws2, "Mix Design Results", project_name, method_name, company_name, company_address)
 
-    row = 4
+    row = 6 if company_name else 4
     ratio_rows = []
     if "target_mean_strength" in mix_result:
         ratio_rows.append(("Target Mean Strength", f'{mix_result["target_mean_strength"]} MPa'))
@@ -106,7 +112,7 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
     ws3 = wb.create_sheet("Site Batching & Cost")
     _write_header(ws3, "Site Batching & Cost Estimation", project_name, method_name, company_name, company_address)
 
-    row = 4
+    row = 6 if company_name else 4
     row = _write_section(ws3, row, "Site Batching", [
         ("Total Volume", f'{batch_info["volume_m3"]} m³'),
         ("Cement Bags per m³", batch_info["bags_per_m3"]),
@@ -139,7 +145,7 @@ def export_excel_report(file_path, project_name, inputs, mix_result, batch_info,
         ws4 = wb.create_sheet("Trial Mix Adjustment")
         _write_header(ws4, "Trial Mix Adjustment", project_name, method_name, company_name, company_address)
 
-        row = 4
+        row = 6 if company_name else 4
         _write_section(ws4, row, "Trial Adjustment", [
             ("Target Slump", f'{trial_result["target_slump"]} mm'),
             ("Actual Measured Slump", f'{trial_result["actual_slump"]} mm'),
