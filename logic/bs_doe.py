@@ -1,6 +1,5 @@
 # concrete mix design calculations - BS/DOE (British / Department of Environment) method
 
-# standard deviation by grade bracket - same style as IS, for target mean strength margin
 def get_std_deviation(fck):
     if fck <= 15:
         return 3.5
@@ -13,23 +12,19 @@ def get_std_deviation(fck):
     return 6.0
 
 
-# free water content (kg/m3) - uncrushed aggregate baseline, by slump category + max agg size
-# crushed aggregate needs extra water (approx +25 kg/m3) added separately below
 water_table = {
-    "low":    {10: 150, 20: 135, 40: 115},   # slump 25-50mm
-    "medium": {10: 180, 20: 170, 40: 155},   # slump 75-100mm
-    "high":   {10: 205, 20: 190, 40: 175},   # slump 150-175mm
+    "low":    {10: 150, 20: 135, 40: 115},
+    "medium": {10: 180, 20: 170, 40: 155},
+    "high":   {10: 205, 20: 190, 40: 175},
 }
 
-CRUSHED_WATER_EXTRA = 25   # kg/m3 extra water needed for crushed (angular) aggregate
+CRUSHED_WATER_EXTRA = 25
 
-# free water/cement ratio vs target mean strength - approximate DOE strength curve (OPC, 28 day)
 strength_wc_table = [
     (15, 0.85), (20, 0.74), (25, 0.65), (30, 0.58),
     (35, 0.52), (40, 0.47), (45, 0.43), (50, 0.38),
 ]
 
-# durability limits by exposure - same structure as IS 456 based tables
 exposure_wc_limit = {
     "mild": 0.55,
     "moderate": 0.50,
@@ -54,16 +49,12 @@ exposure_air = {
     "extreme": 2.0,
 }
 
-# fine aggregate as % of total aggregate (by mass) - by max size and sand zone
-# reuses the same Zone I-IV concept as IS 10262 for consistency
 fine_percentage_table = {
     10: {"I": 0.53, "II": 0.47, "III": 0.42, "IV": 0.38},
     20: {"I": 0.42, "II": 0.37, "III": 0.33, "IV": 0.30},
     40: {"I": 0.33, "II": 0.30, "III": 0.27, "IV": 0.24},
 }
 
-# assumed wet concrete density (kg/m3) - simplification of DOE's density chart,
-# which normally varies with combined aggregate relative density
 ASSUMED_WET_DENSITY = 2350
 
 cement_sg = 3.15
@@ -88,7 +79,6 @@ def get_water_content(slump, max_agg_size, aggregate_type):
 
 
 def get_wc_from_strength(target_strength):
-    # linear interpolation on the strength -> free w/c curve
     table = sorted(strength_wc_table, key=lambda x: x[0])
     if target_strength >= table[-1][0]:
         return table[-1][1]
@@ -109,31 +99,27 @@ def calculate_mix(fck, slump, max_agg_size, exposure, zone, aggregate_type,
     std_dev = get_std_deviation(fck)
     target_mean_strength = fck + 1.64 * std_dev
 
-    # free water content, adjusted for aggregate shape
     water = get_water_content(slump, max_agg_size, aggregate_type)
     water = water * (1 - admixture_reduction / 100)
-    # free w/c ratio - stricter (lower) of strength-based curve and durability limit
+
     wc_strength = get_wc_from_strength(target_mean_strength)
     wc_limit = exposure_wc_limit[exposure]
     wc_final = min(wc_strength, wc_limit)
 
     air_percent = exposure_air[exposure]
 
-    # cement content - higher of (water/wc) or minimum required for exposure
     cement_from_wc = water / wc_final
     min_cement = exposure_min_cement[exposure]
     cement = max(cement_from_wc, min_cement)
 
-    # total aggregate from assumed wet density (mass-basis, not absolute volume)
     total_aggregate = ASSUMED_WET_DENSITY - cement - water
     if total_aggregate < 0:
-        total_aggregate = 0   # safety guard against unrealistic inputs
+        total_aggregate = 0
 
     fine_fraction = fine_percentage_table[max_agg_size][zone]
     fine_weight = total_aggregate * fine_fraction
     coarse_weight = total_aggregate - fine_weight
 
-    # moisture correction - same style as ACI/IS modules
     fine_free_moisture = fine_moisture - fine_absorption
     coarse_free_moisture = coarse_moisture - coarse_absorption
 
