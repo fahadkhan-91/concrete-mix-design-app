@@ -19,8 +19,9 @@ def init_db():
         )
     """)
     conn.commit()
-    init_settings_table()
     conn.close()
+
+    init_settings_table()
 
 
 def save_project(name, inputs, results):
@@ -73,6 +74,8 @@ def search_projects(keyword):
     rows = cursor.fetchall()
     conn.close()
     return rows
+
+
 def get_project_count():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -80,13 +83,8 @@ def get_project_count():
     count = cursor.fetchone()[0]
     conn.close()
     return count
-def get_project_count():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM projects")
-    count = cursor.fetchone()[0]
-    conn.close()
-    return count
+
+
 def init_settings_table():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
