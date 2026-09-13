@@ -23,6 +23,7 @@ from report_generator import generate_pdf_report
 from excel_exporter import export_excel_report
 from charts_widget import ChartsWidget
 from units import kgm3_to_lbyd3, kg_to_lb, m3_to_yd3
+from grade_naming import get_grade_name
 
 
 WIZARD_STEP_TITLES = [
@@ -960,6 +961,8 @@ class MixDesignApp(QWidget):
             return f"{value} m³"
 
         common_rows = [
+        grade_name = get_grade_name(self.method_combo.currentText(), self.fck_input.text() and float(self.fck_input.text()) or 0)
+            ("Concrete Grade", grade_name),
             ("Slump Category", result["slump_category"]),
             ("W/C Ratio (strength-based)", result["wc_strength"]),
             ("W/C Ratio (exposure limit)", result["wc_limit"]),
