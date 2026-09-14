@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QMessageBox, QScrollArea, QFileDialog, QSplashScreen,
     QStackedWidget, QAbstractItemView
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont, QColor
 
 from logic.mix_design import (
@@ -24,14 +24,19 @@ from excel_exporter import export_excel_report
 from charts_widget import ChartsWidget
 from units import kgm3_to_lbyd3, kg_to_lb, m3_to_yd3
 from grade_naming import get_grade_name
-
+from update_checker import check_for_update
 
 WIZARD_STEP_TITLES = [
     "Step 1 of 3: Design Basics",
     "Step 2 of 3: Site & Moisture",
     "Step 3 of 3: Costs & Review",
 ]
+class UpdateCheckThread(QThread):
+    result_ready = Signal(bool, str, str)
 
+    def run(self):
+        has_update, version, url = check_for_update()
+        self.result_ready.emit(has_update, version or "", url or "")
 
 class MixDesignApp(QWidget):
     def __init__(self):
@@ -51,6 +56,9 @@ class MixDesignApp(QWidget):
         self.apply_styles()
         self.refresh_projects_list()
         self.refresh_dashboard()
+        self.update_thread = UpdateCheckThread()
+        self.update_thread.result_ready.connect(self.on_update_check_result)
+        self.update_thread.start()
 
     # ================= TOP-LEVEL LAYOUT =================
 
@@ -789,6 +797,14 @@ class MixDesignApp(QWidget):
         save_setting("unit_system", unit_system)
 
         QMessageBox.information(self, "Saved", "Settings have been saved.")
+    def on_update_check_result(self, has_update, version, url):
+        if has_update:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Update Available")
+            msg.setText(f"A new version ({version}) is available!")
+            msg.setInformativeText(f"You're currently on an older version. Visit the releases page to download it.\n\n{url}")
+            msg.setIcon(QMessageBox.Information)
+            msg.exec()
 
     # ================= DATA / INPUT HELPERS =================
 
