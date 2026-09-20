@@ -22,6 +22,7 @@ def init_db():
     conn.close()
 
     init_settings_table()
+    init_trials_table()
 
 
 def save_project(name, inputs, results):
@@ -32,7 +33,9 @@ def save_project(name, inputs, results):
         (name, json.dumps(inputs), json.dumps(results))
     )
     conn.commit()
+    new_id = cursor.lastrowid
     conn.close()
+    return new_id
 
 
 def get_all_projects():
@@ -117,3 +120,49 @@ def get_setting(key, default=""):
     row = cursor.fetchone()
     conn.close()
     return row[0] if row else default
+
+def init_trials_table():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS trials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            trial_json TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def save_trial(project_id, trial_data):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO trials (project_id, trial_json) VALUES (?, ?)",
+        (project_id, json.dumps(trial_data))
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_trials_for_project(project_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, created_at, trial_json FROM trials WHERE project_id = ? ORDER BY created_at ASC",
+        (project_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [(row[0], row[1], json.loads(row[2])) for row in rows]
+
+
+def delete_trial(trial_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM trials WHERE id = ?", (trial_id,))
+    conn.commit()
+    conn.close()
