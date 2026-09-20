@@ -17,7 +17,8 @@ from logic.is10262 import calculate_mix as calculate_mix_is
 from logic.bs_doe import calculate_mix as calculate_mix_bs
 from database import (
     init_db, save_project, get_all_projects, get_project, delete_project,
-    search_projects, get_project_count, save_setting, get_setting
+    search_projects, get_project_count, save_setting, get_setting,
+    save_trial, get_trials_for_project, delete_trial
 )
 from report_generator import generate_pdf_report
 from excel_exporter import export_excel_report
@@ -48,6 +49,7 @@ class MixDesignApp(QWidget):
         self.last_batch_info = None
         self.last_cost_info = None
         self.last_trial_result = None
+        self.current_project_id = None
         self.current_theme = "dark"
 
         init_db()
@@ -192,6 +194,7 @@ class MixDesignApp(QWidget):
             QMessageBox.warning(self, "Error", "Failed to load the project.")
             return
 
+        self.current_project_id = project_id
         self.set_inputs(inputs)
         self.last_result = results["mix"]
         self.last_batch_info = results["batch"]
@@ -585,13 +588,27 @@ class MixDesignApp(QWidget):
         )
         layout.addLayout(form_row)
 
+        btn_row = QHBoxLayout()
         self.trial_btn = QPushButton("🔧  Compute Trial Adjustment")
         self.trial_btn.setObjectName("trialBtn")
         self.trial_btn.clicked.connect(self.on_trial_adjust)
-        layout.addWidget(self.trial_btn)
+        btn_row.addWidget(self.trial_btn)
+
+        self.save_trial_btn = QPushButton("💾  Save to History")
+        self.save_trial_btn.setObjectName("wizardNavBtn")
+        self.save_trial_btn.clicked.connect(self.on_save_trial)
+        btn_row.addWidget(self.save_trial_btn)
+        layout.addLayout(btn_row)
 
         self.trial_table = self.make_result_table()
         layout.addWidget(self.trial_table)
+
+        history_label = QLabel("TRIAL BATCH HISTORY (this project)")
+        history_label.setObjectName("sectionLabel")
+        layout.addWidget(history_label)
+
+        self.trial_history_list = QListWidget()
+        layout.addWidget(self.trial_history_list)
 
         return tab
 
@@ -957,6 +974,32 @@ class MixDesignApp(QWidget):
         ]
         self.fill_table(self.trial_table, trial_rows)
 
+    def on_save_trial(self):
+        if self.last_trial_result is None:
+            QMessageBox.warning(self, "Nothing to Save", "Please compute a trial adjustment first.")
+            return
+        if self.current_project_id is None:
+            QMessageBox.warning(self, "Save Project First", "Please save this project before recording trial history.")
+            return
+
+        save_trial(self.current_project_id, self.last_trial_result)
+        self.refresh_trial_history()
+        QMessageBox.information(self, "Saved", "Trial batch added to history.")
+
+    def refresh_trial_history(self):
+        self.trial_history_list.clear()
+        if self.current_project_id is None:
+            return
+
+        trials = get_trials_for_project(self.current_project_id)
+        for i, (trial_id, created_at, trial_data) in enumerate(trials, start=1):
+            summary = (
+                f"Trial {i} ({created_at}) — Target: {trial_data['target_slump']}mm, "
+                f"Actual: {trial_data['actual_slump']}mm, "
+                f"Adjusted Water: {trial_data['adjusted_water']} kg/m³"
+            )
+            self.trial_history_list.addItem(summary)
+
     def populate_results(self, result, batch_info, cost_info):
         unit_system = get_setting("unit_system", "metric")
         is_imperial = (unit_system == "imperial")
@@ -1035,6 +1078,7 @@ class MixDesignApp(QWidget):
 
         self.trial_table.setRowCount(0)
         self.last_trial_result = None
+        self.refresh_trial_history()
 
         try:
             self.charts_widget.update_composition_chart(result)
@@ -1068,8 +1112,8 @@ class MixDesignApp(QWidget):
             "cost": self.last_cost_info,
         }
 
-        save_project(name, inputs, combined_results)
-        self.project_name_input.clear()
+        new_id = save_project(name, inputs, combined_results)
+        self.current_project_id = new_id
         self.refresh_projects_list()
         self.refresh_dashboard()
         QMessageBox.information(self, "Saved", f"Project '{name}' has been saved successfully.")
@@ -1186,6 +1230,7 @@ class MixDesignApp(QWidget):
             QMessageBox.warning(self, "Error", "Failed to load the project.")
             return
 
+        self.current_project_id = project_id
         self.set_inputs(inputs)
         self.last_result = results["mix"]
         self.last_batch_info = results["batch"]
