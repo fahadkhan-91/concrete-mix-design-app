@@ -10,7 +10,7 @@ from datetime import datetime
 
 def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
                          cost_info, chart_image_paths=None, trial_result=None,
-                         method_name="ACI 211.1"):
+                         method_name="ACI 211.1", company_name="", company_address=""):
     doc = SimpleDocTemplate(file_path, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
 
@@ -33,7 +33,14 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
     elements = []
 
     # ---------- Header ----------
-    elements.append(Paragraph("Concrete Mix Design Report", title_style))
+    if company_name:
+        elements.append(Paragraph(company_name, title_style))
+        if company_address:
+            elements.append(Paragraph(company_address, subtitle_style))
+        elements.append(Paragraph("Concrete Mix Design Report", subsection_style))
+    else:
+        elements.append(Paragraph("Concrete Mix Design Report", title_style))
+
     elements.append(Paragraph(f"Project: {project_name or 'Untitled'}", subtitle_style))
     elements.append(Paragraph(
         f"Method: {method_name} &nbsp;&nbsp;|&nbsp;&nbsp; Generated: {datetime.now().strftime('%d %b %Y, %I:%M %p')}",
@@ -54,6 +61,7 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
         ["Max Aggregate Size", f"{inputs['max_agg_size']} mm"],
         ["Exposure Condition", inputs['exposure'].replace("_", " ").capitalize()],
     ]
+
     if is_method or is_bs_method:
         design_rows.append(["Sand Zone", inputs.get('zone', 'II')])
     else:
@@ -61,6 +69,7 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
 
     if is_bs_method:
         design_rows.append(["Aggregate Type", inputs.get('aggregate_type', 'uncrushed').capitalize()])
+
     elements.append(make_table(design_rows))
 
     elements.append(Paragraph("Aggregate Moisture Correction", subsection_style))
@@ -72,6 +81,13 @@ def generate_pdf_report(file_path, project_name, inputs, mix_result, batch_info,
         ["Coarse Aggregate Absorption", f"{inputs.get('coarse_absorption', 0)}%"],
     ]
     elements.append(make_table(moisture_rows))
+
+    if float(inputs.get('admixture_reduction', 0) or 0) > 0:
+        elements.append(Paragraph("Admixture", subsection_style))
+        elements.append(make_table([
+            ["Parameter", "Value"],
+            ["Water Reduction (Admixture)", f"{inputs.get('admixture_reduction', 0)}%"],
+        ]))
 
     elements.append(Paragraph("Batch / Site Quantity Settings", subsection_style))
     settings_rows = [
