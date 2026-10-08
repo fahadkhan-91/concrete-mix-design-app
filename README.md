@@ -152,7 +152,7 @@ The installer is created in the `Output/` folder.
 - **Inno Setup** — Windows installer creation
 
 ## Method Reference
-
+    
 Mix design calculations are based on:
 - **ACI 211.1** — Standard Practice for Selecting Proportions for Normal, Heavyweight, and Mass Concrete
 - **IS 10262:2019** — Concrete Mix Proportioning — Guidelines (with durability requirements from IS 456)
